@@ -43,18 +43,21 @@ jobs:
       
       - name: Prepare server directory and deploy
         run: |
-          # Test SSH connection and check permissions
+          # Test SSH connection
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "echo 'SSH connection successful'"
           
-          # Create destination directory and check permissions
-          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ${{ secrets.DEPLOY_PATH }} && ls -la ${{ secrets.DEPLOY_PATH }} && whoami"
+          # Stop the service before deploying
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "systemctl stop auth-api || echo 'Service was not running'"
           
-          # Alternative method: Copy via SSH pipe (more reliable than scp sometimes)
+          # Create destination directory and check permissions
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ${{ secrets.DEPLOY_PATH }} && ls -la ${{ secrets.DEPLOY_PATH }}"
+          
+          # Copy the new binary
           cat artifact/auth-api | ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "cat > ${{ secrets.DEPLOY_PATH }}/auth-api"
           
-          # Verify upload and make executable
-          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "ls -la ${{ secrets.DEPLOY_PATH }}/auth-api && chmod +x ${{ secrets.DEPLOY_PATH }}/auth-api"
+          # Make executable and verify
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "chmod +x ${{ secrets.DEPLOY_PATH }}/auth-api && ls -la ${{ secrets.DEPLOY_PATH }}/auth-api"
       
-      - name: Run deployed binary on server
+      - name: Start the service
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "systemctl restart auth-api"
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "systemctl start auth-api && systemctl status auth-api"
