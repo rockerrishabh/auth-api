@@ -51,10 +51,4 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
-            cd ${{ secrets.DEPLOY_PATH }}
-            chmod +x auth-api
-            # Kill existing process if running
-            pkill -f auth-api || true
-            # Start new process in background
-            nohup ./auth-api > auth-api.log 2>&1 &
-            echo "Deployed and running auth-api on server."
+            systemctl restart auth-api
