@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v4
 
       - name: Set up Rust
-        uses: actions/setup-rust@v1.13.0
+        uses: actions/setup-rust@v1
         with:
           rust-version: stable
 
@@ -27,7 +27,7 @@ jobs:
           cp target/release/auth-api artifact/
 
       - name: Deploy to server via SSH
-        uses: appleboy/scp-action@v1.2.2
+        uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
