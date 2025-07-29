@@ -43,14 +43,14 @@ jobs:
       
       - name: Prepare server directory and deploy
         run: |
-          # Test SSH connection
+          # Test SSH connection and check permissions
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "echo 'SSH connection successful'"
           
-          # Create destination directory if it doesn't exist
-          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ${{ secrets.DEPLOY_PATH }} && ls -la ${{ secrets.DEPLOY_PATH }}"
+          # Create destination directory and check permissions
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ${{ secrets.DEPLOY_PATH }} && ls -la ${{ secrets.DEPLOY_PATH }} && whoami"
           
-          # Copy the binary to server
-          scp -v -i ~/.ssh/id_rsa artifact/auth-api ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/
+          # Alternative method: Copy via SSH pipe (more reliable than scp sometimes)
+          cat artifact/auth-api | ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "cat > ${{ secrets.DEPLOY_PATH }}/auth-api"
           
           # Verify upload and make executable
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "ls -la ${{ secrets.DEPLOY_PATH }}/auth-api && chmod +x ${{ secrets.DEPLOY_PATH }}/auth-api"
