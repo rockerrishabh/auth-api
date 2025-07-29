@@ -41,9 +41,19 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
       
-      - name: Deploy to server via SCP
+      - name: Prepare server directory and deploy
         run: |
-          scp -i ~/.ssh/id_rsa artifact/auth-api ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/
+          # Test SSH connection
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "echo 'SSH connection successful'"
+          
+          # Create destination directory if it doesn't exist
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ${{ secrets.DEPLOY_PATH }} && ls -la ${{ secrets.DEPLOY_PATH }}"
+          
+          # Copy the binary to server
+          scp -v -i ~/.ssh/id_rsa artifact/auth-api ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/
+          
+          # Verify upload and make executable
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "ls -la ${{ secrets.DEPLOY_PATH }}/auth-api && chmod +x ${{ secrets.DEPLOY_PATH }}/auth-api"
       
       - name: Run deployed binary on server
         run: |
