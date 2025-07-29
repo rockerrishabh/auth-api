@@ -2,7 +2,7 @@ use std::env;
 
 use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, get, http, web::Data};
-use auth_api::{db, routes};
+use auth_api::{db, mail::EmailConfig, routes};
 use dotenv::dotenv;
 
 #[get("/")]
@@ -13,8 +13,17 @@ async fn hello() -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
+
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db_pool = db::establish_connection(database_url).await;
+    let smtp_server = env::var("SMTP_SERVER").expect("SMTP_SERVER must be set");
+    let smtp_port: u16 = env::var("SMTP_PORT")
+        .expect("SMTP_PORT must be set")
+        .parse()
+        .expect("SMTP_PORT must be a valid number");
+    let smtp_user = env::var("SMTP_USER").expect("SMTP_USER must be set");
+    let smtp_user_name = env::var("SMTP_USER_NAME").expect("SMTP_USER_NAME must be set");
+    let smtp_password = env::var("SMTP_PASSWORD").expect("SMTP_PASSWORD must be set");
 
     HttpServer::new(move || {
         let cors = Cors::default()
@@ -31,6 +40,13 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .app_data(Data::new(db::AppState {
                 db: db_pool.clone(),
+            }))
+            .app_data(Data::new(EmailConfig {
+                smtp_server: smtp_server.clone(),
+                smtp_port,
+                smtp_user: smtp_user.clone(),
+                smtp_user_name: smtp_user_name.clone(),
+                smtp_password: smtp_password.clone(),
             }))
             .service(hello)
             .configure(routes::config)
