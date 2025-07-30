@@ -1,4 +1,4 @@
-name: Deploy Rust Project
+name: Deploy Rust Auth API
 on:
   push:
     branches:

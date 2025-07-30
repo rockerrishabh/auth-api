@@ -1,8 +1,12 @@
 use std::env;
 
 use actix_cors::Cors;
-use actix_web::{App, HttpResponse, HttpServer, Responder, get, http, web::Data};
-use auth_api::{db, mail::EmailConfig, routes};
+use actix_web::{App, HttpResponse, HttpServer, Responder, get, http::header, web::Data};
+use auth_api::{
+    db::{self, AppState},
+    mail::EmailConfig,
+    routes,
+};
 use dotenv::dotenv;
 
 #[get("/")]
@@ -32,13 +36,13 @@ async fn main() -> std::io::Result<()> {
                 origin.as_bytes().ends_with(b".stellerseller.store")
             })
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
-            .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
-            .allowed_header(http::header::CONTENT_TYPE)
+            .allowed_headers(vec![header::AUTHORIZATION, header::ACCEPT])
+            .allowed_header(header::CONTENT_TYPE)
             .max_age(3600);
 
         App::new()
             .wrap(cors)
-            .app_data(Data::new(db::AppState {
+            .app_data(Data::new(AppState {
                 db: db_pool.clone(),
             }))
             .app_data(Data::new(EmailConfig {
@@ -51,7 +55,7 @@ async fn main() -> std::io::Result<()> {
             .service(hello)
             .configure(routes::config)
     })
-    .bind(("0.0.0.0", 3000))?
+    .bind(("0.0.0.0", 5000))?
     .run()
     .await
 }
