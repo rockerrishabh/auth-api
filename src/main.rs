@@ -35,7 +35,8 @@ async fn main() -> std::io::Result<()> {
             .allowed_origin_fn(|origin, _req_head| {
                 origin.as_bytes().ends_with(b".stellerseller.store")
             })
-            .allowed_origin("localhost")
+            .allowed_origin("http://localhost")
+            .allowed_origin("http://localhost:3000")
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
             .allowed_headers(vec![header::AUTHORIZATION, header::ACCEPT])
             .allowed_header(header::CONTENT_TYPE)
