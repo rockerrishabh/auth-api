@@ -59,7 +59,7 @@ async fn register_user(
 
             println!("New user created: {:?}", user);
 
-            let token = uuid::Uuid::new_v4().to_string();
+            let token = uuid::Uuid::new_v4();
 
             let mail = verification_email(&user.name, &user.email, token);
 

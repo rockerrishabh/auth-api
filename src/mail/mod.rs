@@ -43,7 +43,7 @@ pub fn send_email(info: EmailInfo, config: &EmailConfig) -> Result<Response, Err
     let creds = Credentials::new(config.smtp_user.to_owned(), config.smtp_password.to_owned());
 
     // Open a remote connection to gmail
-    let mailer = SmtpTransport::relay(config.smtp_server.as_str())
+    let mailer = SmtpTransport::starttls_relay(config.smtp_server.as_str())
         .unwrap()
         .port(config.smtp_port)
         .credentials(creds)
