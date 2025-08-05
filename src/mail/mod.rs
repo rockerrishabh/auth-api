@@ -21,7 +21,7 @@ pub struct EmailConfig {
     pub smtp_password: String,
 }
 
-pub fn send_email(info: EmailInfo, config: EmailConfig) -> Result<Response, Error> {
+pub fn send_email(info: EmailInfo, config: &EmailConfig) -> Result<Response, Error> {
     let email = Message::builder()
         .from(Mailbox::new(
             Some(config.smtp_user_name.to_owned()),

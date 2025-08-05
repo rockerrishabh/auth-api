@@ -1,6 +1,6 @@
 use crate::mail::EmailInfo;
 
-pub fn verification_email(name: String, email: String, token: String) -> EmailInfo {
+pub fn verification_email(name: &String, email: &String, token: String) -> EmailInfo {
     let subject = "Please verify your email address".to_string();
     let html = format!(
         r#"

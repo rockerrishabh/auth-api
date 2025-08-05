@@ -7,10 +7,13 @@ use diesel::{
     query_dsl::methods::{FilterDsl, SelectDsl},
 };
 
-use crate::db::{
-    AppState,
-    model::{NewUser, User},
-    schema::users,
+use crate::{
+    db::{
+        AppState,
+        model::{NewUser, User},
+        schema::users,
+    },
+    mail::{EmailConfig, send_email, templates::verification::verification_email},
 };
 
 #[derive(serde::Deserialize, Debug)]
@@ -21,7 +24,11 @@ struct RegisterData {
 }
 
 #[post("/register")]
-async fn register_user(data: Json<RegisterData>, pool: Data<AppState>) -> impl Responder {
+async fn register_user(
+    data: Json<RegisterData>,
+    pool: Data<AppState>,
+    config: Data<EmailConfig>,
+) -> impl Responder {
     let user_data = data.into_inner();
 
     match pool.db.get() {
@@ -33,7 +40,9 @@ async fn register_user(data: Json<RegisterData>, pool: Data<AppState>) -> impl R
                 .expect("Error loading user");
 
             if !results.is_empty() {
-                return HttpResponse::Conflict().body("Email already exists");
+                return HttpResponse::Conflict().json(serde_json::json!({
+                    "message": "User with this email already exists"
+                }));
             }
 
             let new_user = NewUser {
@@ -50,11 +59,33 @@ async fn register_user(data: Json<RegisterData>, pool: Data<AppState>) -> impl R
 
             println!("New user created: {:?}", user);
 
-            HttpResponse::Created().body("User registered successfully")
+            let token = uuid::Uuid::new_v4().to_string();
+
+            let mail = verification_email(&user.name, &user.email, token);
+
+            let mail_result = send_email(mail, config.as_ref());
+
+            if let Err(e) = mail_result {
+                eprintln!("Failed to send verification email: {}", e);
+                return HttpResponse::InternalServerError().json(serde_json::json!({
+                    "message": "Failed to send verification email"
+                }));
+            }
+
+            HttpResponse::Created().json(serde_json::json!({
+                "message": "User registered successfully",
+                "user": {
+                    "id": user.id,
+                    "name": user.name,
+                    "email": user.email,
+                }
+            }))
         }
         Err(e) => {
             eprintln!("Database connection error: {}", e);
-            HttpResponse::InternalServerError().body("Failed to connect to the database")
+            HttpResponse::InternalServerError().json(serde_json::json!({
+                "message": "Database connection error"
+            }))
         }
     }
 }
