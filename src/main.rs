@@ -20,6 +20,7 @@ async fn main() -> std::io::Result<()> {
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db_pool = db::establish_connection(database_url).await;
+
     let smtp_server = env::var("SMTP_SERVER").expect("SMTP_SERVER must be set");
     let smtp_port: u16 = env::var("SMTP_PORT")
         .expect("SMTP_PORT must be set")
