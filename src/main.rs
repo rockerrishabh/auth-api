@@ -54,6 +54,11 @@ async fn main() -> std::io::Result<()> {
                 smtp_user_name: smtp_user_name.clone(),
                 smtp_password: smtp_password.clone(),
             }))
+            .service(
+                actix_files::Files::new("/static", "./static/.")
+                    .show_files_listing()
+                    .use_last_modified(true),
+            )
             .service(hello)
             .configure(routes::config)
     })
