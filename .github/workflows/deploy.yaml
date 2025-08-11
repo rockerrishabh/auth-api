@@ -9,12 +9,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-      
+
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -25,39 +25,57 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-      
+
       - name: Build project
         run: cargo build --release
-      
+
       - name: Prepare artifact
         run: |
           mkdir -p artifact
           cp target/release/auth-api artifact/
-      
+          # Copy static files if they exist
+          if [ -d "static" ]; then
+            cp -r static artifact/
+            echo "Static files copied"
+          else
+            echo "No static directory found"
+          fi
+          # List what we're deploying
+          ls -la artifact/
+
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-      
+
       - name: Prepare server directory and deploy
         run: |
           # Test SSH connection
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "echo 'SSH connection successful'"
-          
+
           # Stop the service before deploying
-          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "systemctl stop auth-api || echo 'Service was not running'"
-          
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "sudo systemctl stop auth-api || echo 'Service was not running'"
+
           # Create destination directory and check permissions
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ${{ secrets.DEPLOY_PATH }} && ls -la ${{ secrets.DEPLOY_PATH }}"
-          
+
           # Copy the new binary
-          cat artifact/auth-api | ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "cat > ${{ secrets.DEPLOY_PATH }}/auth-api"
-          
+          scp -i ~/.ssh/id_rsa artifact/auth-api ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/
+
+          # Copy static files if they exist
+          if [ -d "artifact/static" ]; then
+            echo "Copying static files..."
+            scp -i ~/.ssh/id_rsa -r artifact/static ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/
+            ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "ls -la ${{ secrets.DEPLOY_PATH }}/static/"
+          else
+            echo "No static files to copy"
+          fi
+
           # Make executable and verify
-          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "chmod +x ${{ secrets.DEPLOY_PATH }}/auth-api && ls -la ${{ secrets.DEPLOY_PATH }}/auth-api"
-      
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "chmod +x ${{ secrets.DEPLOY_PATH }}/auth-api && ls -la ${{ secrets.DEPLOY_PATH }}/"
+
       - name: Start the service
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "systemctl start auth-api && systemctl status auth-api"
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "sudo systemctl start auth-api && sudo systemctl status auth-api"
