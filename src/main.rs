@@ -56,7 +56,7 @@ async fn main() -> std::io::Result<()> {
                 smtp_password: smtp_password.clone(),
             }))
             .service(
-                actix_files::Files::new("/static", "./static/.")
+                actix_files::Files::new("/static", "static")
                     .show_files_listing()
                     .use_last_modified(true),
             )
