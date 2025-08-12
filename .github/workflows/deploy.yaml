@@ -27,7 +27,18 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Build project
-        run: cargo build --release
+        run: |
+          # Ensure NASM is installed
+          sudo apt-get update
+          sudo apt-get install -y nasm
+          cargo build --release --locked
+          # Ensure the binary is built
+          if [ -f target/release/auth-api ]; then
+            echo "Build successful, binary found."
+          else
+            echo "Build failed, binary not found."
+            exit 1
+          fi
 
       - name: Prepare artifact
         run: |
