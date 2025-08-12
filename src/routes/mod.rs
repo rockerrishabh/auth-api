@@ -1,6 +1,7 @@
 use actix_web::web;
 
 mod auth;
+pub mod uploads;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -12,5 +13,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(auth::refresh::refresh_token)
             .service(auth::verify::verify_user)
             .service(auth::reset::reset_password),
-    );
+    )
+    .service(web::scope("/uploads").service(uploads::image::upload_image));
 }

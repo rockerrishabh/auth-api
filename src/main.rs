@@ -5,7 +5,7 @@ use actix_web::{App, HttpResponse, HttpServer, Responder, get, http::header, web
 use auth_api::{
     db::{self, AppState},
     mail::EmailConfig,
-    routes,
+    routes::{self, uploads::image::UploadConfig},
 };
 use dotenv::dotenv;
 
@@ -30,6 +30,14 @@ async fn main() -> std::io::Result<()> {
     let smtp_user_name = env::var("SMTP_USER_NAME").expect("SMTP_USER_NAME must be set");
     let smtp_password = env::var("SMTP_PASSWORD").expect("SMTP_PASSWORD must be set");
 
+    let cpus = num_cpus::get();
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(cpus)
+        .build_global()
+        .expect("Failed to build Rayon global thread pool");
+
+    let config = Data::new(UploadConfig::default());
+
     HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin("https://stellerseller.store")
@@ -48,6 +56,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(Data::new(AppState {
                 db: db_pool.clone(),
             }))
+            .app_data(config.clone())
             .app_data(Data::new(EmailConfig {
                 smtp_server: smtp_server.clone(),
                 smtp_port,
