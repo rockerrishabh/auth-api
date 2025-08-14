@@ -1,4 +1,4 @@
-use actix_multipart::{Multipart, form};
+use actix_multipart::Multipart;
 use actix_web::{HttpResponse, Result, post, web::Data};
 use diesel::{
     ExpressionMethods, RunQueryDsl, SelectableHelper,
