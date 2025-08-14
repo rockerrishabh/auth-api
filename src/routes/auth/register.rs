@@ -1,4 +1,4 @@
-use actix_multipart::Multipart;
+use actix_multipart::{Multipart, form};
 use actix_web::{HttpResponse, Result, post, web::Data};
 use diesel::{
     ExpressionMethods, RunQueryDsl, SelectableHelper,
@@ -13,14 +13,11 @@ use crate::utils::image_process::{UploadConfig, image_process};
 use crate::{
     db::{
         AppState,
-        model::{NewUser, User, NewEmailVerificationToken},
-        schema::{users, email_verification_tokens},
+        model::{NewEmailVerificationToken, NewUser, User},
+        schema::{email_verification_tokens, users},
     },
     mail::{EmailConfig, send_message, templates::verification::verification_email},
-    utils::{
-        jwt::JwtConfig,
-        password::PasswordService,
-    },
+    utils::{jwt::JwtConfig, password::PasswordService},
 };
 
 #[derive(Error, Debug)]
@@ -158,7 +155,6 @@ impl ParsedFormData {
     }
 }
 
-
 #[post("/register")]
 pub async fn register_user(
     payload: Multipart,
@@ -228,7 +224,6 @@ async fn handle_registration(
     })))
 }
 
-
 async fn check_user_exists(
     email: &str,
     conn: &mut diesel::r2d2::PooledConnection<
@@ -258,11 +253,19 @@ async fn create_user(
     let password_hash = PasswordService::hash_password(&data.password)
         .map_err(|e| RegistrationError::UserCreationFailed(e.to_string()))?;
 
+    let avatar_url = format!(
+        "https://api.stellerseller.store/static/{}",
+        data.uploaded_files
+            .first()
+            .map(|f| f.avif_name.as_str())
+            .unwrap_or("default.png"),
+    );
+
     let new_user = NewUser {
         name: &data.name,
         email: &data.email,
         password_hash: Some(&password_hash),
-        avatar: data.uploaded_files.first().map(|f| f.avif_name.as_str()),
+        avatar: Some(&avatar_url),
         avatar_thumbnail: data
             .uploaded_files
             .first()
@@ -280,7 +283,9 @@ async fn send_verification_email(
     user: &User,
     email_config: &EmailConfig,
     jwt_config: &JwtConfig,
-    conn: &mut diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<diesel::PgConnection>>,
+    conn: &mut diesel::r2d2::PooledConnection<
+        diesel::r2d2::ConnectionManager<diesel::PgConnection>,
+    >,
 ) -> Result<(), RegistrationError> {
     // Generate JWT verification token
     let verification_token = jwt_config
@@ -351,7 +356,8 @@ async fn parse_form_data_with_buffered_images(
                 "image" => {
                     if let Some(fname) = filename {
                         // Buffer the image data without processing it
-                        let buffered_image = buffer_image_data(&mut field, &fname, image_config).await?;
+                        let buffered_image =
+                            buffer_image_data(&mut field, &fname, image_config).await?;
                         data.buffered_images.push(buffered_image);
                         info!("Buffered image data: {}", fname);
                     }
@@ -423,7 +429,7 @@ async fn process_buffered_images(
     // Process each buffered image
     for buffered_image in parsed_data.buffered_images {
         info!("Processing buffered image: {}", buffered_image.filename);
-        
+
         let processed_image = image_process(
             buffered_image.data,
             buffered_image.filename.clone(),
