@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, Result, post, web, web::Data};
+use actix_web::{HttpResponse, Result, post, web, web::Data, cookie::Cookie};
 use chrono::Utc;
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use log::{error, info};
@@ -65,7 +65,6 @@ pub struct LoginResponse {
     pub message: String,
     pub user: UserInfo,
     pub access_token: String,
-    pub refresh_token: String,
     pub expires_in: i64,
 }
 
@@ -88,9 +87,15 @@ pub async fn login_user(
     info!("Login attempt for email: {}", login_data.email);
 
     match handle_login(login_data.into_inner(), &pool, &jwt_config).await {
-        Ok(response) => {
+        Ok((response, refresh_token, remember_me)) => {
             info!("Login successful for email: {}", response.user.email);
-            Ok(HttpResponse::Ok().json(response))
+            
+            // Create refresh token cookie
+            let cookie = create_refresh_token_cookie(&refresh_token, &jwt_config, remember_me);
+            
+            Ok(HttpResponse::Ok()
+                .cookie(cookie)
+                .json(response))
         }
         Err(e) => {
             error!("Login failed: {}", e);
@@ -103,7 +108,7 @@ async fn handle_login(
     login_data: LoginRequest,
     pool: &AppState,
     jwt_config: &JwtConfig,
-) -> Result<LoginResponse, LoginError> {
+) -> Result<(LoginResponse, String, bool), LoginError> {
     // Get database connection
     let mut conn = pool
         .db
@@ -162,6 +167,8 @@ async fn handle_login(
     // Clean up old refresh tokens for this user
     cleanup_old_refresh_tokens(&user.id, &mut conn).await?;
 
+    let remember_me = login_data.remember_me.unwrap_or(false);
+    
     let response = LoginResponse {
         message: "Login successful".to_string(),
         user: UserInfo {
@@ -173,11 +180,10 @@ async fn handle_login(
             email_verified: user.email_verified,
         },
         access_token,
-        refresh_token,
         expires_in: jwt_config.access_token_expiry.num_seconds(),
     };
 
-    Ok(response)
+    Ok((response, refresh_token, remember_me))
 }
 
 async fn store_refresh_token(
@@ -250,4 +256,22 @@ async fn cleanup_old_refresh_tokens(
     }
 
     Ok(())
+}
+
+fn create_refresh_token_cookie(refresh_token: &str, jwt_config: &JwtConfig, remember_me: bool) -> Cookie<'static> {
+    let max_age = if remember_me {
+        // 90 days in seconds
+        90 * 24 * 60 * 60
+    } else {
+        // 30 days in seconds (default refresh token expiry)
+        jwt_config.refresh_token_expiry.num_seconds() as i64
+    };
+
+    Cookie::build("refresh_token", refresh_token.to_string())
+        .path("/")
+        .max_age(actix_web::cookie::time::Duration::seconds(max_age))
+        .http_only(true)
+        .secure(true) // Only send over HTTPS
+        .same_site(actix_web::cookie::SameSite::Strict)
+        .finish()
 }

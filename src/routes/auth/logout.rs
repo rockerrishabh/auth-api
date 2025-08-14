@@ -1,4 +1,4 @@
-use actix_web::{post, web, web::Data, HttpResponse, Result, HttpRequest};
+use actix_web::{post, web, web::Data, HttpResponse, Result, HttpRequest, cookie::Cookie};
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
@@ -46,7 +46,6 @@ impl LogoutError {
 
 #[derive(Deserialize)]
 pub struct LogoutRequest {
-    pub refresh_token: Option<String>,
     pub logout_all: Option<bool>,
 }
 
@@ -67,7 +66,19 @@ pub async fn logout_user(
     match handle_logout(req, logout_data.into_inner(), &pool, &jwt_config).await {
         Ok(response) => {
             info!("Logout successful");
-            Ok(HttpResponse::Ok().json(response))
+            
+            // Create cookie to clear the refresh token
+            let clear_cookie = Cookie::build("refresh_token", "")
+                .path("/")
+                .max_age(actix_web::cookie::time::Duration::seconds(0))
+                .http_only(true)
+                .secure(true)
+                .same_site(actix_web::cookie::SameSite::Strict)
+                .finish();
+            
+            Ok(HttpResponse::Ok()
+                .cookie(clear_cookie)
+                .json(response))
         }
         Err(e) => {
             error!("Logout failed: {}", e);
@@ -120,36 +131,37 @@ async fn handle_logout(
         Ok(LogoutResponse {
             message: "Successfully logged out from all devices".to_string(),
         })
-    } else if let Some(refresh_token) = &logout_data.refresh_token {
-        // Revoke specific refresh token
-        let stored_tokens: Vec<(uuid::Uuid, String)> = refresh_tokens::table
-            .filter(refresh_tokens::user_id.eq(&user_id))
-            .filter(refresh_tokens::revoked.eq(false))
-            .select((refresh_tokens::id, refresh_tokens::token_hash))
-            .load(&mut conn)
-            .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
+    } else {
+        // Get refresh token from cookie
+        let refresh_token = req.cookie("refresh_token").map(|c| c.value().to_string());
+        
+        if let Some(refresh_token) = refresh_token {
+            // Revoke specific refresh token
+            let stored_tokens: Vec<(uuid::Uuid, String)> = refresh_tokens::table
+                .filter(refresh_tokens::user_id.eq(&user_id))
+                .filter(refresh_tokens::revoked.eq(false))
+                .select((refresh_tokens::id, refresh_tokens::token_hash))
+                .load(&mut conn)
+                .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
 
-        // Find and revoke the matching token
-        for (token_id, token_hash) in stored_tokens {
-            if PasswordService::verify_password(refresh_token, &token_hash).unwrap_or(false) {
-                diesel::update(refresh_tokens::table.filter(refresh_tokens::id.eq(&token_id)))
-                    .set(refresh_tokens::revoked.eq(true))
-                    .execute(&mut conn)
-                    .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
+            // Find and revoke the matching token
+            for (token_id, token_hash) in stored_tokens {
+                if PasswordService::verify_password(&refresh_token, &token_hash).unwrap_or(false) {
+                    diesel::update(refresh_tokens::table.filter(refresh_tokens::id.eq(&token_id)))
+                        .set(refresh_tokens::revoked.eq(true))
+                        .execute(&mut conn)
+                        .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
 
-                info!("Specific session logged out for user: {}", user_id);
-                
-                return Ok(LogoutResponse {
-                    message: "Successfully logged out".to_string(),
-                });
+                    info!("Specific session logged out for user: {}", user_id);
+                    
+                    return Ok(LogoutResponse {
+                        message: "Successfully logged out".to_string(),
+                    });
+                }
             }
         }
 
-        // If we get here, the refresh token wasn't found
-        return Err(LogoutError::InvalidToken);
-    } else {
-        // No refresh token provided, just acknowledge the logout
-        // In a real implementation, you might want to maintain a blacklist of access tokens
+        // No refresh token found or token didn't match, just acknowledge the logout
         info!("Access token logout for user: {}", user_id);
         
         Ok(LogoutResponse {

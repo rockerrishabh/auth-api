@@ -1,8 +1,8 @@
-use actix_web::{post, web, web::Data, HttpResponse, Result};
+use actix_web::{post, web::Data, HttpResponse, Result, HttpRequest, cookie::Cookie};
 use chrono::Utc;
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use log::{error, info};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
@@ -61,31 +61,37 @@ impl RefreshError {
     }
 }
 
-#[derive(Deserialize)]
-pub struct RefreshRequest {
-    pub refresh_token: String,
-}
-
 #[derive(Serialize)]
 pub struct RefreshResponse {
     pub message: String,
     pub access_token: String,
-    pub refresh_token: String,
     pub expires_in: i64,
 }
 
 #[post("/refresh")]
-pub async fn refresh_token(
-    refresh_data: web::Json<RefreshRequest>,
+pub async fn refresh_user_token(
+    req: HttpRequest,
     pool: Data<AppState>,
     jwt_config: Data<JwtConfig>,
 ) -> Result<HttpResponse> {
     info!("Token refresh attempt");
 
-    match handle_refresh(refresh_data.into_inner(), &pool, &jwt_config).await {
-        Ok(response) => {
+    // Extract refresh token from cookie
+    let token_value = match req.cookie("refresh_token") {
+        Some(cookie) => cookie.value().to_string(),
+        None => return Ok(RefreshError::InvalidToken.to_http_response()),
+    };
+
+    match handle_refresh(token_value, &pool, &jwt_config).await {
+        Ok((response, new_token)) => {
             info!("Token refresh successful");
-            Ok(HttpResponse::Ok().json(response))
+            
+            // Create new refresh token cookie
+            let cookie = create_refresh_token_cookie(&new_token, &jwt_config);
+            
+            Ok(HttpResponse::Ok()
+                .cookie(cookie)
+                .json(response))
         }
         Err(e) => {
             error!("Token refresh failed: {}", e);
@@ -95,13 +101,13 @@ pub async fn refresh_token(
 }
 
 async fn handle_refresh(
-    refresh_data: RefreshRequest,
+    token_value: String,
     pool: &AppState,
     jwt_config: &JwtConfig,
-) -> Result<RefreshResponse, RefreshError> {
+) -> Result<(RefreshResponse, String), RefreshError> {
     // Verify the refresh token
     let token_data = jwt_config
-        .verify_token_type(&refresh_data.refresh_token, TokenType::Refresh)
+        .verify_token_type(&token_value, TokenType::Refresh)
         .map_err(|_| RefreshError::InvalidToken)?;
 
     let user_id = uuid::Uuid::parse_str(&token_data.claims.sub)
@@ -123,7 +129,7 @@ async fn handle_refresh(
     // Find the matching token and check its status
     let mut matching_token: Option<&RefreshToken> = None;
     for stored_token in &all_stored_tokens {
-        if PasswordService::verify_password(&refresh_data.refresh_token, &stored_token.token_hash)
+        if PasswordService::verify_password(&token_value, &stored_token.token_hash)
             .unwrap_or(false)
         {
             matching_token = Some(stored_token);
@@ -192,11 +198,10 @@ async fn handle_refresh(
     let response = RefreshResponse {
         message: "Token refreshed successfully".to_string(),
         access_token: new_access_token,
-        refresh_token: new_refresh_token,
         expires_in: jwt_config.access_token_expiry.num_seconds(),
     };
 
-    Ok(response)
+    Ok((response, new_refresh_token))
 }
 
 async fn cleanup_old_refresh_tokens(
@@ -233,4 +238,16 @@ async fn cleanup_old_refresh_tokens(
     }
 
     Ok(())
+}
+
+fn create_refresh_token_cookie(token_value: &str, jwt_config: &JwtConfig) -> Cookie<'static> {
+    let max_age = jwt_config.refresh_token_expiry.num_seconds() as i64;
+
+    Cookie::build("refresh_token", token_value.to_string())
+        .path("/")
+        .max_age(actix_web::cookie::time::Duration::seconds(max_age))
+        .http_only(true)
+        .secure(true) // Only send over HTTPS
+        .same_site(actix_web::cookie::SameSite::Strict)
+        .finish()
 }

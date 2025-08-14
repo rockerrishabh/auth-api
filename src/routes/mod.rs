@@ -9,7 +9,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(auth::register::register_user)
             .service(auth::me::get_user_profile)
             .service(auth::logout::logout_user)
-            .service(auth::refresh::refresh_token)
+            .service(auth::refresh::refresh_user_token)
             .service(auth::verify::verify_email)
             .service(auth::verify::resend_verification)
             .service(auth::reset::forgot_password)
