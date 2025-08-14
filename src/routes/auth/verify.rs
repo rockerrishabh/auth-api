@@ -1,6 +1,292 @@
-use actix_web::{HttpResponse, Responder, post};
+use actix_web::{get, post, web::Data, HttpResponse, Result, web};
+use chrono::Utc;
+use diesel::{BoolExpressionMethods, ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
+use log::{error, info};
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-#[post("/verify")]
-async fn verify_user() -> impl Responder {
-    HttpResponse::Ok().body("Verify endpoint")
+use crate::{
+    db::{
+        model::{NewEmailVerificationToken, EmailVerificationToken, User},
+        schema::{email_verification_tokens, users},
+        AppState,
+    },
+    mail::{send_message, templates::verification::verification_email, EmailConfig},
+    utils::{
+        jwt::{JwtConfig, TokenType},
+        password::PasswordService,
+    },
+};
+
+#[derive(Error, Debug)]
+pub enum VerificationError {
+    #[error("User not found")]
+    UserNotFound,
+    #[error("Invalid or expired token")]
+    InvalidToken,
+    #[error("Token already used")]
+    TokenUsed,
+    #[error("Email already verified")]
+    AlreadyVerified,
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+    #[error("Email sending error: {0}")]
+    EmailError(String),
+    #[error("Token generation error: {0}")]
+    TokenError(String),
+}
+
+impl VerificationError {
+    pub fn to_http_response(&self) -> HttpResponse {
+        match self {
+            VerificationError::UserNotFound => {
+                HttpResponse::NotFound().json(serde_json::json!({
+                    "error": "User not found",
+                    "message": "User account not found"
+                }))
+            }
+            VerificationError::InvalidToken | VerificationError::TokenUsed => {
+                HttpResponse::BadRequest().json(serde_json::json!({
+                    "error": "Invalid token",
+                    "message": "Verification token is invalid, expired, or already used"
+                }))
+            }
+            VerificationError::AlreadyVerified => {
+                HttpResponse::BadRequest().json(serde_json::json!({
+                    "error": "Already verified",
+                    "message": "Email address is already verified"
+                }))
+            }
+            VerificationError::DatabaseError(_) | 
+            VerificationError::EmailError(_) | 
+            VerificationError::TokenError(_) => {
+                HttpResponse::InternalServerError().json(serde_json::json!({
+                    "error": "Internal server error",
+                    "message": "An error occurred while processing your request"
+                }))
+            }
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct ResendVerificationRequest {
+    pub email: String,
+}
+
+#[derive(Serialize)]
+pub struct VerificationResponse {
+    pub message: String,
+}
+
+#[get("/verify")]
+pub async fn verify_email(
+    query: web::Query<std::collections::HashMap<String, String>>,
+    pool: Data<AppState>,
+    jwt_config: Data<JwtConfig>,
+) -> Result<HttpResponse> {
+    let token = query.get("token").cloned().unwrap_or_default();
+    
+    if token.is_empty() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "Missing token",
+            "message": "Verification token is required"
+        })));
+    }
+
+    info!("Email verification attempt");
+
+    match handle_verify_email(token, &pool, &jwt_config).await {
+        Ok(response) => {
+            info!("Email verification successful");
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(e) => {
+            error!("Email verification failed: {}", e);
+            Ok(e.to_http_response())
+        }
+    }
+}
+
+#[post("/resend-verification")]
+pub async fn resend_verification(
+    request: web::Json<ResendVerificationRequest>,
+    pool: Data<AppState>,
+    jwt_config: Data<JwtConfig>,
+    email_config: Data<EmailConfig>,
+) -> Result<HttpResponse> {
+    info!("Resend verification request for email: {}", request.email);
+
+    match handle_resend_verification(request.into_inner(), &pool, &jwt_config, &email_config).await {
+        Ok(response) => {
+            info!("Verification email resent");
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(e) => {
+            error!("Resend verification failed: {}", e);
+            Ok(e.to_http_response())
+        }
+    }
+}
+
+async fn handle_verify_email(
+    token: String,
+    pool: &AppState,
+    jwt_config: &JwtConfig,
+) -> Result<VerificationResponse, VerificationError> {
+    // Verify the verification token
+    let token_data = jwt_config
+        .verify_token_type(&token, TokenType::EmailVerification)
+        .map_err(|_| VerificationError::InvalidToken)?;
+
+    let user_id = uuid::Uuid::parse_str(&token_data.claims.sub)
+        .map_err(|_| VerificationError::InvalidToken)?;
+
+    // Get database connection
+    let mut conn = pool
+        .db
+        .get()
+        .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+    // Check if user exists and is not already verified
+    let user = users::table
+        .filter(users::id.eq(&user_id))
+        .select(User::as_select())
+        .first::<User>(&mut conn)
+        .optional()
+        .map_err(|e| VerificationError::DatabaseError(e.to_string()))?
+        .ok_or(VerificationError::UserNotFound)?;
+
+    if user.email_verified {
+        return Err(VerificationError::AlreadyVerified);
+    }
+
+    // Find all verification tokens for this user (including expired/used ones for better error messages)
+    let all_stored_tokens: Vec<EmailVerificationToken> = email_verification_tokens::table
+        .filter(email_verification_tokens::user_id.eq(&user_id))
+        .select(EmailVerificationToken::as_select())
+        .load(&mut conn)
+        .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+    // Find the matching token and check its status
+    let mut matching_token: Option<&EmailVerificationToken> = None;
+    for stored_token in &all_stored_tokens {
+        if PasswordService::verify_password(&token, &stored_token.token_hash)
+            .unwrap_or(false)
+        {
+            matching_token = Some(stored_token);
+            break;
+        }
+    }
+
+    let verification_token = matching_token.ok_or(VerificationError::InvalidToken)?;
+
+    // Check if token is already used
+    if verification_token.used {
+        return Err(VerificationError::TokenUsed);
+    }
+
+    // Check if token is expired
+    if verification_token.expires_at <= Utc::now() {
+        return Err(VerificationError::InvalidToken);
+    }
+
+    let token_id = verification_token.id;
+
+    // Mark user as verified
+    diesel::update(users::table.filter(users::id.eq(&user_id)))
+        .set(users::email_verified.eq(true))
+        .execute(&mut conn)
+        .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+    // Mark the verification token as used
+    diesel::update(email_verification_tokens::table.filter(email_verification_tokens::id.eq(&token_id)))
+        .set(email_verification_tokens::used.eq(true))
+        .execute(&mut conn)
+        .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+    // Clean up old verification tokens
+    cleanup_old_verification_tokens(&user_id, &mut conn).await?;
+
+    Ok(VerificationResponse {
+        message: "Email verified successfully".to_string(),
+    })
+}
+
+async fn handle_resend_verification(
+    request: ResendVerificationRequest,
+    pool: &AppState,
+    jwt_config: &JwtConfig,
+    email_config: &EmailConfig,
+) -> Result<VerificationResponse, VerificationError> {
+    // Get database connection
+    let mut conn = pool
+        .db
+        .get()
+        .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+    // Find user by email
+    let user = users::table
+        .filter(users::email.eq(&request.email))
+        .select(User::as_select())
+        .first::<User>(&mut conn)
+        .optional()
+        .map_err(|e| VerificationError::DatabaseError(e.to_string()))?
+        .ok_or(VerificationError::UserNotFound)?;
+
+    if user.email_verified {
+        return Err(VerificationError::AlreadyVerified);
+    }
+
+    // Generate verification token
+    let verification_token = jwt_config
+        .generate_email_verification_token(user.id, &user.email)
+        .map_err(|e| VerificationError::TokenError(e.to_string()))?;
+
+    // Hash the token before storing
+    let token_hash = PasswordService::hash_password(&verification_token)
+        .map_err(|e| VerificationError::TokenError(e.to_string()))?;
+
+    // Store the token in database
+    let new_verification_token = NewEmailVerificationToken {
+        user_id: user.id,
+        token_hash: &token_hash,
+        expires_at: Utc::now() + jwt_config.email_verification_expiry,
+    };
+
+    diesel::insert_into(email_verification_tokens::table)
+        .values(&new_verification_token)
+        .execute(&mut conn)
+        .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+    // Send verification email
+    let mail = verification_email(&user.name, &user.email, &verification_token);
+    send_message(mail, email_config)
+        .map_err(|e| VerificationError::EmailError(e.to_string()))?;
+
+    // Clean up old verification tokens
+    cleanup_old_verification_tokens(&user.id, &mut conn).await?;
+
+    Ok(VerificationResponse {
+        message: "Verification email sent successfully".to_string(),
+    })
+}
+
+async fn cleanup_old_verification_tokens(
+    user_id: &uuid::Uuid,
+    conn: &mut diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<diesel::PgConnection>>,
+) -> Result<(), VerificationError> {
+    // Delete expired or used tokens
+    diesel::delete(
+        email_verification_tokens::table
+            .filter(email_verification_tokens::user_id.eq(user_id))
+            .filter(
+                email_verification_tokens::expires_at.lt(Utc::now())
+                    .or(email_verification_tokens::used.eq(true))
+            )
+    )
+    .execute(conn)
+    .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+    Ok(())
 }

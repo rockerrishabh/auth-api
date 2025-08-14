@@ -1,23 +1,23 @@
 use lettre::{
+    message::{header::ContentType, Mailbox},
     Message,
-    message::{Mailbox, header::ContentType},
 };
 use std::env;
 
-pub fn verification_email(name: &str, email: &str, verification_token: &str) -> Message {
+pub fn password_reset_email(name: &str, email: &str, reset_token: &str) -> Message {
     let from_email = env::var("SMTP_USER").unwrap_or_else(|_| "noreply@example.com".to_string());
     let from_name = env::var("SMTP_USER_NAME").unwrap_or_else(|_| "Auth API".to_string());
     let base_url = env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
-
+    
     let from: Mailbox = format!("{} <{}>", from_name, from_email)
         .parse()
         .expect("Invalid from email");
-
+    
     let to: Mailbox = format!("{} <{}>", name, email)
         .parse()
         .expect("Invalid to email");
 
-    let verification_url = format!("{}/api/auth/verify?token={}", base_url, verification_token);
+    let reset_url = format!("{}/reset-password?token={}", base_url, reset_token);
 
     let html_body = format!(
         r#"
@@ -26,7 +26,7 @@ pub fn verification_email(name: &str, email: &str, verification_token: &str) -> 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Email Verification</title>
+    <title>Password Reset</title>
     <style>
         body {{
             font-family: Arial, sans-serif;
@@ -58,19 +58,19 @@ pub fn verification_email(name: &str, email: &str, verification_token: &str) -> 
         .button {{
             display: inline-block;
             padding: 12px 24px;
-            background-color: #28a745;
+            background-color: #007bff;
             color: white;
             text-decoration: none;
             border-radius: 5px;
             margin: 20px 0;
         }}
         .button:hover {{
-            background-color: #218838;
+            background-color: #0056b3;
         }}
-        .info {{
-            background-color: #d1ecf1;
-            border: 1px solid #bee5eb;
-            color: #0c5460;
+        .warning {{
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
             padding: 15px;
             border-radius: 5px;
             margin: 20px 0;
@@ -87,33 +87,33 @@ pub fn verification_email(name: &str, email: &str, verification_token: &str) -> 
 </head>
 <body>
     <div class="header">
-        <h1>Welcome! Please Verify Your Email</h1>
+        <h1>Password Reset Request</h1>
     </div>
     
     <div class="content">
         <p>Hello {name},</p>
         
-        <p>Thank you for registering with us! To complete your account setup, please verify your email address by clicking the button below:</p>
+        <p>We received a request to reset your password for your account. If you made this request, click the button below to reset your password:</p>
         
         <div style="text-align: center;">
-            <a href="{verification_url}" class="button">Verify Email Address</a>
+            <a href="{reset_url}" class="button">Reset Password</a>
         </div>
         
         <p>If the button doesn't work, you can copy and paste the following link into your browser:</p>
-        <div class="code">{verification_url}</div>
+        <div class="code">{reset_url}</div>
         
-        <div class="info">
-            <strong>Note:</strong>
+        <div class="warning">
+            <strong>Important:</strong>
             <ul>
-                <li>This verification link will expire in 24 hours</li>
-                <li>If you didn't create an account, please ignore this email</li>
-                <li>You won't be able to log in until your email is verified</li>
+                <li>This link will expire in 1 hour for security reasons</li>
+                <li>If you didn't request this password reset, please ignore this email</li>
+                <li>Your password will remain unchanged until you create a new one</li>
             </ul>
         </div>
         
-        <p>If you're having trouble with the verification process, please contact our support team.</p>
+        <p>If you're having trouble with the password reset process, please contact our support team.</p>
         
-        <p>Welcome aboard!<br>The Auth API Team</p>
+        <p>Best regards,<br>The Auth API Team</p>
     </div>
     
     <div class="footer">
@@ -124,27 +124,27 @@ pub fn verification_email(name: &str, email: &str, verification_token: &str) -> 
 </html>
         "#,
         name = name,
-        verification_url = verification_url
+        reset_url = reset_url
     );
 
     let text_body = format!(
         r#"
-Welcome! Please Verify Your Email
+Password Reset Request
 
 Hello {name},
 
-Thank you for registering with us! To complete your account setup, please verify your email address by visiting the following link:
+We received a request to reset your password for your account. If you made this request, please visit the following link to reset your password:
 
-{verification_url}
+{reset_url}
 
-Note:
-- This verification link will expire in 24 hours
-- If you didn't create an account, please ignore this email
-- You won't be able to log in until your email is verified
+Important:
+- This link will expire in 1 hour for security reasons
+- If you didn't request this password reset, please ignore this email
+- Your password will remain unchanged until you create a new one
 
-If you're having trouble with the verification process, please contact our support team.
+If you're having trouble with the password reset process, please contact our support team.
 
-Welcome aboard!
+Best regards,
 The Auth API Team
 
 ---
@@ -152,13 +152,13 @@ This is an automated message, please do not reply to this email.
 If you have any questions, please contact our support team.
         "#,
         name = name,
-        verification_url = verification_url
+        reset_url = reset_url
     );
 
     Message::builder()
         .from(from)
         .to(to)
-        .subject("Please verify your email address")
+        .subject("Password Reset Request")
         .header(ContentType::TEXT_HTML)
         .multipart(
             lettre::message::MultiPart::alternative()
@@ -173,5 +173,5 @@ If you have any questions, please contact our support team.
                         .body(html_body),
                 ),
         )
-        .expect("Failed to build verification email")
+        .expect("Failed to build password reset email")
 }

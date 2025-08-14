@@ -5,7 +5,8 @@ use actix_web::{App, HttpResponse, HttpServer, Responder, get, http::header, web
 use auth_api::{
     db::{self, AppState},
     mail::EmailConfig,
-    routes::{self, uploads::image::UploadConfig},
+    routes,
+    utils::{image_process::UploadConfig, jwt::JwtConfig},
 };
 use dotenv::dotenv;
 
@@ -17,6 +18,9 @@ async fn hello() -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
+
+    // Initialize logging
+    env_logger::init();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db_pool = db::establish_connection(database_url).await;
@@ -36,7 +40,13 @@ async fn main() -> std::io::Result<()> {
         .build_global()
         .expect("Failed to build Rayon global thread pool");
 
-    let config = Data::new(UploadConfig::default());
+    let upload_config = UploadConfig::default();
+
+    // Ensure upload directory exists
+    std::fs::create_dir_all(&upload_config.upload_dir).expect("Failed to create upload directory");
+
+    let config = Data::new(upload_config);
+    let jwt_config = Data::new(JwtConfig::default());
 
     HttpServer::new(move || {
         let cors = Cors::default()
@@ -64,6 +74,7 @@ async fn main() -> std::io::Result<()> {
                 smtp_user_name: smtp_user_name.clone(),
                 smtp_password: smtp_password.clone(),
             }))
+            .app_data(jwt_config.clone())
             .service(
                 actix_files::Files::new("/static", "static")
                     .show_files_listing()
