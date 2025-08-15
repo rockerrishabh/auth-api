@@ -1,20 +1,18 @@
-use actix_web::{post, web::Data, HttpResponse, Result, HttpRequest, cookie::Cookie};
-use chrono::Utc;
+use actix_web::{HttpRequest, HttpResponse, Result, cookie::Cookie, post, web::Data};
+use chrono::{Duration, Utc};
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use log::{error, info};
 use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
+    config::AppConfig,
     db::{
+        AppState,
         model::{NewRefreshToken, RefreshToken, User},
         schema::{refresh_tokens, users},
-        AppState,
     },
-    utils::{
-        jwt::{JwtConfig, TokenType},
-        password::PasswordService,
-    },
+    utils::password::PasswordService,
 };
 
 #[derive(Error, Debug)]
@@ -36,22 +34,17 @@ pub enum RefreshError {
 impl RefreshError {
     pub fn to_http_response(&self) -> HttpResponse {
         match self {
-            RefreshError::InvalidToken | 
-            RefreshError::TokenExpired | 
-            RefreshError::TokenRevoked => {
-                HttpResponse::Unauthorized().json(serde_json::json!({
-                    "error": "Invalid token",
-                    "message": "Refresh token is invalid, expired, or revoked"
-                }))
-            }
-            RefreshError::UserNotFound => {
-                HttpResponse::NotFound().json(serde_json::json!({
-                    "error": "User not found",
-                    "message": "Associated user account not found"
-                }))
-            }
-            RefreshError::DatabaseError(_) | 
-            RefreshError::TokenError(_) => {
+            RefreshError::InvalidToken
+            | RefreshError::TokenExpired
+            | RefreshError::TokenRevoked => HttpResponse::Unauthorized().json(serde_json::json!({
+                "error": "Invalid token",
+                "message": "Refresh token is invalid, expired, or revoked"
+            })),
+            RefreshError::UserNotFound => HttpResponse::NotFound().json(serde_json::json!({
+                "error": "User not found",
+                "message": "Associated user account not found"
+            })),
+            RefreshError::DatabaseError(_) | RefreshError::TokenError(_) => {
                 HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "Internal server error",
                     "message": "An error occurred while processing your request"
@@ -72,7 +65,7 @@ pub struct RefreshResponse {
 pub async fn refresh_user_token(
     req: HttpRequest,
     pool: Data<AppState>,
-    jwt_config: Data<JwtConfig>,
+    config: Data<AppConfig>,
 ) -> Result<HttpResponse> {
     info!("Token refresh attempt");
 
@@ -82,16 +75,14 @@ pub async fn refresh_user_token(
         None => return Ok(RefreshError::InvalidToken.to_http_response()),
     };
 
-    match handle_refresh(token_value, &pool, &jwt_config).await {
+    match handle_refresh(token_value, &pool, &config).await {
         Ok((response, new_token)) => {
             info!("Token refresh successful");
-            
+
             // Create new refresh token cookie
-            let cookie = create_refresh_token_cookie(&new_token, &jwt_config);
-            
-            Ok(HttpResponse::Ok()
-                .cookie(cookie)
-                .json(response))
+            let cookie = create_refresh_token_cookie(&new_token, &config);
+
+            Ok(HttpResponse::Ok().cookie(cookie).json(response))
         }
         Err(e) => {
             error!("Token refresh failed: {}", e);
@@ -103,15 +94,15 @@ pub async fn refresh_user_token(
 async fn handle_refresh(
     token_value: String,
     pool: &AppState,
-    jwt_config: &JwtConfig,
+    config: &AppConfig,
 ) -> Result<(RefreshResponse, String), RefreshError> {
     // Verify the refresh token
-    let token_data = jwt_config
-        .verify_token_type(&token_value, TokenType::Refresh)
+    let token_data = config
+        .jwt
+        .verify_token(&token_value)
         .map_err(|_| RefreshError::InvalidToken)?;
 
-    let user_id = uuid::Uuid::parse_str(&token_data.claims.sub)
-        .map_err(|_| RefreshError::InvalidToken)?;
+    let user_id = &token_data.claims.sub;
 
     // Get database connection
     let mut conn = pool
@@ -129,8 +120,7 @@ async fn handle_refresh(
     // Find the matching token and check its status
     let mut matching_token: Option<&RefreshToken> = None;
     for stored_token in &all_stored_tokens {
-        if PasswordService::verify_password(&token_value, &stored_token.token_hash)
-            .unwrap_or(false)
+        if PasswordService::verify_password(&token_value, &stored_token.token_hash).unwrap_or(false)
         {
             matching_token = Some(stored_token);
             break;
@@ -160,15 +150,14 @@ async fn handle_refresh(
         .map_err(|e| RefreshError::DatabaseError(e.to_string()))?
         .ok_or(RefreshError::UserNotFound)?;
 
-    // Generate new tokens
-    let role_str = format!("{:?}", user.role).to_lowercase();
-    
-    let new_access_token = jwt_config
-        .generate_access_token(user.id, &user.email, &role_str)
+    let new_access_token = config
+        .jwt
+        .generate_access_token(user.id, &user.email)
         .map_err(|e| RefreshError::TokenError(e.to_string()))?;
 
-    let new_refresh_token = jwt_config
-        .generate_refresh_token(user.id, &user.email, &role_str)
+    let new_refresh_token = config
+        .jwt
+        .generate_refresh_token(user.id, &user.email)
         .map_err(|e| RefreshError::TokenError(e.to_string()))?;
 
     // Revoke the old refresh token
@@ -184,7 +173,7 @@ async fn handle_refresh(
     let new_refresh_token_record = NewRefreshToken {
         user_id: user.id,
         token_hash: &token_hash,
-        expires_at: Utc::now() + jwt_config.refresh_token_expiry,
+        expires_at: Utc::now() + Duration::seconds(config.jwt.expires_in),
     };
 
     diesel::insert_into(refresh_tokens::table)
@@ -198,7 +187,7 @@ async fn handle_refresh(
     let response = RefreshResponse {
         message: "Token refreshed successfully".to_string(),
         access_token: new_access_token,
-        expires_in: jwt_config.access_token_expiry.num_seconds(),
+        expires_in: config.jwt.expires_in,
     };
 
     Ok((response, new_refresh_token))
@@ -206,13 +195,15 @@ async fn handle_refresh(
 
 async fn cleanup_old_refresh_tokens(
     user_id: &uuid::Uuid,
-    conn: &mut diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<diesel::PgConnection>>,
+    conn: &mut diesel::r2d2::PooledConnection<
+        diesel::r2d2::ConnectionManager<diesel::PgConnection>,
+    >,
 ) -> Result<(), RefreshError> {
     // Delete expired tokens
     diesel::delete(
         refresh_tokens::table
             .filter(refresh_tokens::user_id.eq(user_id))
-            .filter(refresh_tokens::expires_at.lt(Utc::now()))
+            .filter(refresh_tokens::expires_at.lt(Utc::now())),
     )
     .execute(conn)
     .map_err(|e| RefreshError::DatabaseError(e.to_string()))?;
@@ -231,7 +222,7 @@ async fn cleanup_old_refresh_tokens(
         diesel::delete(
             refresh_tokens::table
                 .filter(refresh_tokens::user_id.eq(user_id))
-                .filter(refresh_tokens::id.ne_all(&tokens_to_keep))
+                .filter(refresh_tokens::id.ne_all(&tokens_to_keep)),
         )
         .execute(conn)
         .map_err(|e| RefreshError::DatabaseError(e.to_string()))?;
@@ -240,8 +231,8 @@ async fn cleanup_old_refresh_tokens(
     Ok(())
 }
 
-fn create_refresh_token_cookie(token_value: &str, jwt_config: &JwtConfig) -> Cookie<'static> {
-    let max_age = jwt_config.refresh_token_expiry.num_seconds() as i64;
+fn create_refresh_token_cookie(token_value: &str, config: &AppConfig) -> Cookie<'static> {
+    let max_age = config.jwt.expires_in;
 
     Cookie::build("refresh_token", token_value.to_string())
         .path("/")

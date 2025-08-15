@@ -5,43 +5,9 @@ use image::{DynamicImage, GenericImageView, ImageReader};
 use ravif::{Encoder, Img};
 use rgb::FromSlice;
 use sanitize_filename::sanitize;
-use serde::Deserialize;
 use uuid::Uuid;
 
-#[derive(Deserialize, Clone, Debug)]
-pub struct UploadConfig {
-    pub max_file_size: usize,
-    pub allowed_extensions: Vec<String>,
-    pub upload_dir: String,
-    pub max_width: u32,
-    pub max_height: u32,
-    pub quality: u8,
-    pub generate_thumbnails: bool,
-    pub thumbnail_size: u32,
-}
-
-impl Default for UploadConfig {
-    fn default() -> Self {
-        Self {
-            max_file_size: 10 * 1024 * 1024,
-            allowed_extensions: vec![
-                "jpg".into(),
-                "jpeg".into(),
-                "png".into(),
-                "gif".into(),
-                "webp".into(),
-                "bmp".into(),
-                "tiff".into(),
-            ],
-            upload_dir: "./static".into(),
-            max_width: 1920,
-            max_height: 1080,
-            quality: 75, // reasonable default
-            generate_thumbnails: true,
-            thumbnail_size: 300,
-        }
-    }
-}
+use crate::config::UploadConfig;
 
 #[derive(serde::Serialize, Debug)]
 pub struct ProcessedImage {
@@ -134,14 +100,26 @@ pub async fn image_process(
     config: &UploadConfig,
 ) -> Result<ProcessedImage, actix_web::Error> {
     // Ensure upload directory exists
-    fs::create_dir_all(&config.upload_dir)
-        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to create upload directory: {}", e)))?;
-    
+    fs::create_dir_all(&config.upload_dir).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!(
+            "Failed to create upload directory: {}",
+            e
+        ))
+    })?;
+
     let ext = Path::new(&original_filename)
         .extension()
         .and_then(|e| e.to_str())
         .map(|s| s.to_lowercase())
         .unwrap_or_default();
+
+    // Validate file extension against allowed types
+    if !config.allowed_types.contains(&ext) {
+        return Err(actix_web::error::ErrorBadRequest(format!(
+            "File type '{}' not allowed. Allowed types: {:?}",
+            ext, config.allowed_types
+        )));
+    }
 
     // decode image
     let img = web::block(move || {
@@ -181,6 +159,7 @@ pub async fn image_process(
             actix_web::error::ErrorInternalServerError(format!("Failed to save AVIF: {}", e))
         })?;
 
+    // Generate thumbnails based on configuration
     let mut thumbnail_info = None;
     if config.generate_thumbnails {
         let thumb = create_thumbnail(&resized_image, config.thumbnail_size);

@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, Result, post, web, web::Data, cookie::Cookie};
+use actix_web::{HttpResponse, Result, cookie::Cookie, post, web, web::Data};
 use chrono::Utc;
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use log::{error, info};
@@ -6,12 +6,13 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
+    config::AppConfig,
     db::{
         AppState,
         model::{NewRefreshToken, User},
         schema::{refresh_tokens, users},
     },
-    utils::{jwt::JwtConfig, password::PasswordService},
+    utils::password::PasswordService,
 };
 
 #[derive(Error, Debug)]
@@ -82,20 +83,18 @@ pub struct UserInfo {
 pub async fn login_user(
     login_data: web::Json<LoginRequest>,
     pool: Data<AppState>,
-    jwt_config: Data<JwtConfig>,
+    config: Data<AppConfig>,
 ) -> Result<HttpResponse> {
     info!("Login attempt for email: {}", login_data.email);
 
-    match handle_login(login_data.into_inner(), &pool, &jwt_config).await {
+    match handle_login(login_data.into_inner(), &pool, &config).await {
         Ok((response, refresh_token, remember_me)) => {
             info!("Login successful for email: {}", response.user.email);
-            
+
             // Create refresh token cookie
-            let cookie = create_refresh_token_cookie(&refresh_token, &jwt_config, remember_me);
-            
-            Ok(HttpResponse::Ok()
-                .cookie(cookie)
-                .json(response))
+            let cookie = create_refresh_token_cookie(&refresh_token, &config, remember_me);
+
+            Ok(HttpResponse::Ok().cookie(cookie).json(response))
         }
         Err(e) => {
             error!("Login failed: {}", e);
@@ -107,7 +106,7 @@ pub async fn login_user(
 async fn handle_login(
     login_data: LoginRequest,
     pool: &AppState,
-    jwt_config: &JwtConfig,
+    config: &AppConfig,
 ) -> Result<(LoginResponse, String, bool), LoginError> {
     // Get database connection
     let mut conn = pool
@@ -146,19 +145,21 @@ async fn handle_login(
     // Generate tokens
     let role_str = format!("{:?}", user.role).to_lowercase();
 
-    let access_token = jwt_config
-        .generate_access_token(user.id, &user.email, &role_str)
+    let access_token = config
+        .jwt
+        .generate_access_token(user.id, &user.email)
         .map_err(|e| LoginError::TokenError(e.to_string()))?;
 
-    let refresh_token = jwt_config
-        .generate_refresh_token(user.id, &user.email, &role_str)
+    let refresh_token = config
+        .jwt
+        .generate_refresh_token(user.id, &user.email)
         .map_err(|e| LoginError::TokenError(e.to_string()))?;
 
     // Store refresh token in database with extended expiry if remember_me is true
     store_refresh_token(
         &user.id,
         &refresh_token,
-        jwt_config,
+        config,
         &mut conn,
         login_data.remember_me.unwrap_or(false),
     )
@@ -168,7 +169,7 @@ async fn handle_login(
     cleanup_old_refresh_tokens(&user.id, &mut conn).await?;
 
     let remember_me = login_data.remember_me.unwrap_or(false);
-    
+
     let response = LoginResponse {
         message: "Login successful".to_string(),
         user: UserInfo {
@@ -180,7 +181,7 @@ async fn handle_login(
             email_verified: user.email_verified,
         },
         access_token,
-        expires_in: jwt_config.access_token_expiry.num_seconds(),
+        expires_in: config.jwt.expires_in,
     };
 
     Ok((response, refresh_token, remember_me))
@@ -189,7 +190,7 @@ async fn handle_login(
 async fn store_refresh_token(
     user_id: &uuid::Uuid,
     token: &str,
-    jwt_config: &JwtConfig,
+    config: &AppConfig,
     conn: &mut diesel::r2d2::PooledConnection<
         diesel::r2d2::ConnectionManager<diesel::PgConnection>,
     >,
@@ -203,7 +204,7 @@ async fn store_refresh_token(
     let expiry_duration = if remember_me {
         chrono::Duration::days(90)
     } else {
-        jwt_config.refresh_token_expiry
+        chrono::Duration::seconds(config.jwt.expires_in)
     };
 
     let new_refresh_token = NewRefreshToken {
@@ -258,13 +259,17 @@ async fn cleanup_old_refresh_tokens(
     Ok(())
 }
 
-fn create_refresh_token_cookie(refresh_token: &str, jwt_config: &JwtConfig, remember_me: bool) -> Cookie<'static> {
+fn create_refresh_token_cookie(
+    refresh_token: &str,
+    config: &AppConfig,
+    remember_me: bool,
+) -> Cookie<'static> {
     let max_age = if remember_me {
         // 90 days in seconds
         90 * 24 * 60 * 60
     } else {
         // 30 days in seconds (default refresh token expiry)
-        jwt_config.refresh_token_expiry.num_seconds() as i64
+        config.jwt.expires_in
     };
 
     Cookie::build("refresh_token", refresh_token.to_string())

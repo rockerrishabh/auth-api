@@ -1,25 +1,5 @@
-use lettre::{
-    Message,
-    message::{Mailbox, header::ContentType},
-};
-use std::env;
-
-pub fn verification_email(name: &str, email: &str, verification_token: &str) -> Message {
-    let from_email = env::var("SMTP_USER").unwrap_or_else(|_| "noreply@example.com".to_string());
-    let from_name = env::var("SMTP_USER_NAME").unwrap_or_else(|_| "Auth API".to_string());
-    let base_url = env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
-
-    let from: Mailbox = format!("{} <{}>", from_name, from_email)
-        .parse()
-        .expect("Invalid from email");
-
-    let to: Mailbox = format!("{} <{}>", name, email)
-        .parse()
-        .expect("Invalid to email");
-
-    let verification_url = format!("{}/api/auth/verify?token={}", base_url, verification_token);
-
-    let html_body = format!(
+pub fn create_verification_html(name: &str, verification_url: &str) -> String {
+    format!(
         r#"
 <!DOCTYPE html>
 <html lang="en">
@@ -125,9 +105,11 @@ pub fn verification_email(name: &str, email: &str, verification_token: &str) -> 
         "#,
         name = name,
         verification_url = verification_url
-    );
+    )
+}
 
-    let text_body = format!(
+pub fn create_verification_text(name: &str, verification_url: &str) -> String {
+    format!(
         r#"
 Welcome! Please Verify Your Email
 
@@ -153,25 +135,5 @@ If you have any questions, please contact our support team.
         "#,
         name = name,
         verification_url = verification_url
-    );
-
-    Message::builder()
-        .from(from)
-        .to(to)
-        .subject("Please verify your email address")
-        .header(ContentType::TEXT_HTML)
-        .multipart(
-            lettre::message::MultiPart::alternative()
-                .singlepart(
-                    lettre::message::SinglePart::builder()
-                        .header(ContentType::TEXT_PLAIN)
-                        .body(text_body),
-                )
-                .singlepart(
-                    lettre::message::SinglePart::builder()
-                        .header(ContentType::TEXT_HTML)
-                        .body(html_body),
-                ),
-        )
-        .expect("Failed to build verification email")
+    )
 }

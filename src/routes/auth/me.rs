@@ -1,16 +1,12 @@
-use actix_web::{get, web::Data, HttpResponse, Result, HttpRequest};
+use actix_web::{HttpRequest, HttpResponse, Result, get, web::Data};
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use log::{error, info};
 use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
-    db::{
-        model::User,
-        schema::users,
-        AppState,
-    },
-    utils::jwt::{JwtConfig, TokenType},
+    config::AppConfig,
+    db::{AppState, model::User, schema::users},
 };
 
 #[derive(Error, Debug)]
@@ -34,12 +30,10 @@ impl MeError {
                     "message": "Invalid or missing authentication token"
                 }))
             }
-            MeError::UserNotFound => {
-                HttpResponse::NotFound().json(serde_json::json!({
-                    "error": "User not found",
-                    "message": "User account not found"
-                }))
-            }
+            MeError::UserNotFound => HttpResponse::NotFound().json(serde_json::json!({
+                "error": "User not found",
+                "message": "User account not found"
+            })),
             MeError::DatabaseError(_) => {
                 HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "Internal server error",
@@ -72,11 +66,11 @@ pub struct MeResponse {
 pub async fn get_user_profile(
     req: HttpRequest,
     pool: Data<AppState>,
-    jwt_config: Data<JwtConfig>,
+    config: Data<AppConfig>,
 ) -> Result<HttpResponse> {
     info!("User profile request");
 
-    match handle_me(req, &pool, &jwt_config).await {
+    match handle_me(req, &pool, &config).await {
         Ok(response) => {
             info!("User profile retrieved successfully");
             Ok(HttpResponse::Ok().json(response))
@@ -91,7 +85,7 @@ pub async fn get_user_profile(
 async fn handle_me(
     req: HttpRequest,
     pool: &AppState,
-    jwt_config: &JwtConfig,
+    config: &AppConfig,
 ) -> Result<MeResponse, MeError> {
     // Extract access token from Authorization header
     let auth_header = req
@@ -102,12 +96,12 @@ async fn handle_me(
         .ok_or(MeError::MissingAuth)?;
 
     // Verify access token
-    let token_data = jwt_config
-        .verify_token_type(auth_header, TokenType::Access)
+    let token_data = config
+        .jwt
+        .verify_token(auth_header)
         .map_err(|_| MeError::InvalidToken)?;
 
-    let user_id = uuid::Uuid::parse_str(&token_data.claims.sub)
-        .map_err(|_| MeError::InvalidToken)?;
+    let user_id = &token_data.claims.sub;
 
     // Get database connection
     let mut conn = pool
@@ -136,7 +130,5 @@ async fn handle_me(
         updated_at: user.updated_at.map(|dt| dt.to_rfc3339()),
     };
 
-    Ok(MeResponse {
-        user: user_profile,
-    })
+    Ok(MeResponse { user: user_profile })
 }

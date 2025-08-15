@@ -11,8 +11,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(auth::logout::logout_user)
             .service(auth::refresh::refresh_user_token)
             .service(auth::verify::verify_email)
-            .service(auth::verify::resend_verification)
-            .service(auth::reset::forgot_password)
-            .service(auth::reset::reset_password),
+            .service(auth::verify::resend_verification),
     );
 }

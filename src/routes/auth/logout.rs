@@ -1,18 +1,13 @@
-use actix_web::{post, web, web::Data, HttpResponse, Result, HttpRequest, cookie::Cookie};
+use actix_web::{HttpRequest, HttpResponse, Result, cookie::Cookie, post, web, web::Data};
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    db::{
-        schema::refresh_tokens,
-        AppState,
-    },
-    utils::{
-        jwt::{JwtConfig, TokenType},
-        password::PasswordService,
-    },
+    config::AppConfig,
+    db::{AppState, schema::refresh_tokens},
+    utils::password::PasswordService,
 };
 
 #[derive(Error, Debug)]
@@ -28,12 +23,11 @@ pub enum LogoutError {
 impl LogoutError {
     pub fn to_http_response(&self) -> HttpResponse {
         match self {
-            LogoutError::InvalidToken | LogoutError::MissingAuth => {
-                HttpResponse::Unauthorized().json(serde_json::json!({
+            LogoutError::InvalidToken | LogoutError::MissingAuth => HttpResponse::Unauthorized()
+                .json(serde_json::json!({
                     "error": "Invalid token",
                     "message": "Invalid or missing authentication token"
-                }))
-            }
+                })),
             LogoutError::DatabaseError(_) => {
                 HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "Internal server error",
@@ -59,14 +53,14 @@ pub async fn logout_user(
     req: HttpRequest,
     logout_data: web::Json<LogoutRequest>,
     pool: Data<AppState>,
-    jwt_config: Data<JwtConfig>,
+    config: Data<AppConfig>,
 ) -> Result<HttpResponse> {
     info!("Logout attempt");
 
-    match handle_logout(req, logout_data.into_inner(), &pool, &jwt_config).await {
+    match handle_logout(req, logout_data.into_inner(), &pool, &config).await {
         Ok(response) => {
             info!("Logout successful");
-            
+
             // Create cookie to clear the refresh token
             let clear_cookie = Cookie::build("refresh_token", "")
                 .path("/")
@@ -75,10 +69,8 @@ pub async fn logout_user(
                 .secure(true)
                 .same_site(actix_web::cookie::SameSite::Strict)
                 .finish();
-            
-            Ok(HttpResponse::Ok()
-                .cookie(clear_cookie)
-                .json(response))
+
+            Ok(HttpResponse::Ok().cookie(clear_cookie).json(response))
         }
         Err(e) => {
             error!("Logout failed: {}", e);
@@ -91,7 +83,7 @@ async fn handle_logout(
     req: HttpRequest,
     logout_data: LogoutRequest,
     pool: &AppState,
-    jwt_config: &JwtConfig,
+    config: &AppConfig,
 ) -> Result<LogoutResponse, LogoutError> {
     // Extract access token from Authorization header
     let auth_header = req
@@ -102,12 +94,12 @@ async fn handle_logout(
         .ok_or(LogoutError::MissingAuth)?;
 
     // Verify access token to get user ID
-    let token_data = jwt_config
-        .verify_token_type(auth_header, TokenType::Access)
+    let token_data = config
+        .jwt
+        .verify_token(auth_header)
         .map_err(|_| LogoutError::InvalidToken)?;
 
-    let user_id = uuid::Uuid::parse_str(&token_data.claims.sub)
-        .map_err(|_| LogoutError::InvalidToken)?;
+    let user_id = &token_data.claims.sub;
 
     // Get database connection
     let mut conn = pool
@@ -120,21 +112,21 @@ async fn handle_logout(
         diesel::update(
             refresh_tokens::table
                 .filter(refresh_tokens::user_id.eq(&user_id))
-                .filter(refresh_tokens::revoked.eq(false))
+                .filter(refresh_tokens::revoked.eq(false)),
         )
         .set(refresh_tokens::revoked.eq(true))
         .execute(&mut conn)
         .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
 
         info!("All sessions logged out for user: {}", user_id);
-        
+
         Ok(LogoutResponse {
             message: "Successfully logged out from all devices".to_string(),
         })
     } else {
         // Get refresh token from cookie
         let refresh_token = req.cookie("refresh_token").map(|c| c.value().to_string());
-        
+
         if let Some(refresh_token) = refresh_token {
             // Revoke specific refresh token
             let stored_tokens: Vec<(uuid::Uuid, String)> = refresh_tokens::table
@@ -153,7 +145,7 @@ async fn handle_logout(
                         .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
 
                     info!("Specific session logged out for user: {}", user_id);
-                    
+
                     return Ok(LogoutResponse {
                         message: "Successfully logged out".to_string(),
                     });
@@ -163,7 +155,7 @@ async fn handle_logout(
 
         // No refresh token found or token didn't match, just acknowledge the logout
         info!("Access token logout for user: {}", user_id);
-        
+
         Ok(LogoutResponse {
             message: "Successfully logged out".to_string(),
         })

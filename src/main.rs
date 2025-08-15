@@ -1,12 +1,12 @@
-use std::env;
-
 use actix_cors::Cors;
-use actix_web::{App, HttpResponse, HttpServer, Responder, get, http::header, web::Data};
+use actix_web::{
+    App, HttpResponse, HttpServer, Responder, get, http::header, middleware::Logger, web::Data,
+};
 use auth_api::{
+    config::AppConfig,
     db::{self, AppState},
-    mail::EmailConfig,
+    mail::EmailService,
     routes,
-    utils::{image_process::UploadConfig, jwt::JwtConfig},
 };
 use dotenv::dotenv;
 
@@ -18,63 +18,48 @@ async fn hello() -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
-
-    // Initialize logging
     env_logger::init();
 
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let db_pool = db::establish_connection(database_url).await;
+    // Load configuration from environment
+    let config: AppConfig =
+        AppConfig::from_env().expect("Failed to load configuration from environment variables");
 
-    let smtp_server = env::var("SMTP_SERVER").expect("SMTP_SERVER must be set");
-    let smtp_port: u16 = env::var("SMTP_PORT")
-        .expect("SMTP_PORT must be set")
-        .parse()
-        .expect("SMTP_PORT must be a valid number");
-    let smtp_user = env::var("SMTP_USER").expect("SMTP_USER must be set");
-    let smtp_user_name = env::var("SMTP_USER_NAME").expect("SMTP_USER_NAME must be set");
-    let smtp_password = env::var("SMTP_PASSWORD").expect("SMTP_PASSWORD must be set");
+    // Initialize database
+    let db_pool = db::establish_connection(config.database_url.clone()).await;
 
+    // Initialize email service
+    let email_service =
+        EmailService::new(config.email.clone()).expect("Failed to initialize email service");
+
+    // Setup thread pool
     let cpus = num_cpus::get();
     rayon::ThreadPoolBuilder::new()
         .num_threads(cpus)
         .build_global()
         .expect("Failed to build Rayon global thread pool");
 
-    let upload_config = UploadConfig::default();
-
     // Ensure upload directory exists
-    std::fs::create_dir_all(&upload_config.upload_dir).expect("Failed to create upload directory");
+    std::fs::create_dir_all(&config.upload.upload_dir).expect("Failed to create upload directory");
 
-    let config = Data::new(upload_config);
-    let jwt_config = Data::new(JwtConfig::default());
+    let server_config = config.server.clone();
+    let frontend_url = config.server.frontend_url.clone();
 
     HttpServer::new(move || {
         let cors = Cors::default()
-            .allowed_origin("https://stellerseller.store")
-            .allowed_origin_fn(|origin, _req_head| {
-                origin.as_bytes().ends_with(b".stellerseller.store")
-            })
-            .allowed_origin("http://localhost")
-            .allowed_origin("http://localhost:3000")
+            .allowed_origin(&frontend_url)
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
             .allowed_headers(vec![header::AUTHORIZATION, header::ACCEPT])
             .allowed_header(header::CONTENT_TYPE)
             .max_age(3600);
 
         App::new()
+            .wrap(Logger::default())
             .wrap(cors)
             .app_data(Data::new(AppState {
                 db: db_pool.clone(),
             }))
-            .app_data(config.clone())
-            .app_data(Data::new(EmailConfig {
-                smtp_server: smtp_server.clone(),
-                smtp_port,
-                smtp_user: smtp_user.clone(),
-                smtp_user_name: smtp_user_name.clone(),
-                smtp_password: smtp_password.clone(),
-            }))
-            .app_data(jwt_config.clone())
+            .app_data(Data::new(config.clone()))
+            .app_data(Data::new(email_service.clone()))
             .service(
                 actix_files::Files::new("/static", "static")
                     .show_files_listing()
@@ -83,7 +68,7 @@ async fn main() -> std::io::Result<()> {
             .service(hello)
             .configure(routes::config)
     })
-    .bind(("0.0.0.0", 5000))?
+    .bind((server_config.host.as_str(), server_config.port))?
     .run()
     .await
 }

@@ -1,5 +1,6 @@
 use actix_multipart::Multipart;
 use actix_web::{HttpResponse, Result, post, web::Data};
+use chrono::{Duration, Utc};
 use diesel::{
     ExpressionMethods, RunQueryDsl, SelectableHelper,
     query_dsl::methods::{FilterDsl, SelectDsl},
@@ -9,15 +10,18 @@ use log::{error, info, warn};
 use std::path::Path;
 use thiserror::Error;
 
-use crate::utils::image_process::{UploadConfig, image_process};
 use crate::{
+    config::{AppConfig, UploadConfig},
     db::{
         AppState,
         model::{NewEmailVerificationToken, NewUser, User},
         schema::{email_verification_tokens, users},
     },
-    mail::{EmailConfig, send_message, templates::verification::verification_email},
-    utils::{jwt::JwtConfig, password::PasswordService},
+    mail::EmailService,
+    utils::{
+        image_process::{ProcessedImage, image_process},
+        password::PasswordService,
+    },
 };
 
 #[derive(Error, Debug)]
@@ -54,6 +58,9 @@ pub enum RegistrationError {
 
     #[error("Failed to send verification email: {0}")]
     EmailSendFailed(String),
+
+    #[error("JWT token generation failed: {0}")]
+    JwtError(String),
 }
 
 impl RegistrationError {
@@ -84,7 +91,8 @@ impl RegistrationError {
             | RegistrationError::DatabaseQuery(_)
             | RegistrationError::UserCreationFailed(_)
             | RegistrationError::ImageProcessingError(_)
-            | RegistrationError::EmailSendFailed(_) => {
+            | RegistrationError::EmailSendFailed(_)
+            | RegistrationError::JwtError(_) => {
                 HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "Internal server error",
                     "message": "An error occurred while processing your request"
@@ -99,7 +107,7 @@ struct RegistrationData {
     name: String,
     email: String,
     password: String,
-    uploaded_files: Vec<crate::utils::image_process::ProcessedImage>,
+    uploaded_files: Vec<ProcessedImage>,
 }
 
 #[derive(Debug)]
@@ -159,13 +167,12 @@ impl ParsedFormData {
 pub async fn register_user(
     payload: Multipart,
     pool: Data<AppState>,
-    email_config: Data<EmailConfig>,
-    image_config: Data<UploadConfig>,
-    jwt_config: Data<JwtConfig>,
+    email_service: Data<EmailService>,
+    config: Data<AppConfig>,
 ) -> Result<HttpResponse> {
     info!("Registration endpoint called");
 
-    match handle_registration(payload, pool, email_config, image_config, jwt_config).await {
+    match handle_registration(payload, pool, email_service, config).await {
         Ok(response) => Ok(response),
         Err(e) => {
             error!("Registration failed: {}", e);
@@ -177,12 +184,11 @@ pub async fn register_user(
 async fn handle_registration(
     mut payload: Multipart,
     pool: Data<AppState>,
-    email_config: Data<EmailConfig>,
-    image_config: Data<UploadConfig>,
-    jwt_config: Data<JwtConfig>,
+    email_service: Data<EmailService>,
+    config: Data<AppConfig>,
 ) -> Result<HttpResponse, RegistrationError> {
     // Parse all form data but buffer images without processing them
-    let parsed_data = parse_form_data_with_buffered_images(&mut payload, &image_config).await?;
+    let parsed_data = parse_form_data_with_buffered_images(&mut payload, &config.upload).await?;
 
     // Validate basic input data
     parsed_data.validate()?;
@@ -202,13 +208,13 @@ async fn handle_registration(
     check_user_exists(&parsed_data.email, &mut conn).await?;
 
     // Only now process buffered images since we know the user doesn't exist
-    let registration_data = process_buffered_images(parsed_data, &image_config).await?;
+    let registration_data = process_buffered_images(parsed_data, &config.upload).await?;
 
     // Create new user
-    let user = create_user(&registration_data, &mut conn).await?;
+    let user = create_user(&registration_data, &config.server.domain, &mut conn).await?;
 
     // Send verification email
-    send_verification_email(&user, &email_config, &jwt_config, &mut conn).await?;
+    send_verification_email(&user, &email_service, &config, &mut conn).await?;
 
     info!("User registered successfully: {}", user.email);
 
@@ -245,6 +251,7 @@ async fn check_user_exists(
 
 async fn create_user(
     data: &RegistrationData,
+    server_domain: &str,
     conn: &mut diesel::r2d2::PooledConnection<
         diesel::r2d2::ConnectionManager<diesel::PgConnection>,
     >,
@@ -253,13 +260,12 @@ async fn create_user(
     let password_hash = PasswordService::hash_password(&data.password)
         .map_err(|e| RegistrationError::UserCreationFailed(e.to_string()))?;
 
-    let avatar_url = format!(
-        "https://api.stellerseller.store/static/{}",
-        data.uploaded_files
-            .first()
-            .map(|f| f.avif_name.as_str())
-            .unwrap_or("default.png"),
-    );
+    // Generate avatar URL using server domain from config
+    let avatar_url = if let Some(first_file) = data.uploaded_files.first() {
+        format!("{}/static/{}", server_domain, first_file.avif_name)
+    } else {
+        format!("{}/static/default.png", server_domain)
+    };
 
     let new_user = NewUser {
         name: &data.name,
@@ -281,26 +287,28 @@ async fn create_user(
 
 async fn send_verification_email(
     user: &User,
-    email_config: &EmailConfig,
-    jwt_config: &JwtConfig,
+    email_service: &EmailService,
+    config: &AppConfig,
     conn: &mut diesel::r2d2::PooledConnection<
         diesel::r2d2::ConnectionManager<diesel::PgConnection>,
     >,
 ) -> Result<(), RegistrationError> {
     // Generate JWT verification token
-    let verification_token = jwt_config
+    let verification_token = config
+        .jwt
         .generate_email_verification_token(user.id, &user.email)
-        .map_err(|e| RegistrationError::EmailSendFailed(e.to_string()))?;
+        .map_err(|e| RegistrationError::JwtError(e.to_string()))?;
 
     // Hash the token before storing
     let token_hash = PasswordService::hash_password(&verification_token)
         .map_err(|e| RegistrationError::EmailSendFailed(e.to_string()))?;
 
-    // Store the token in database
+    // Store the token in database with 24 hour expiry
+    let expires_at = Utc::now() + Duration::hours(24);
     let new_verification_token = NewEmailVerificationToken {
         user_id: user.id,
         token_hash: &token_hash,
-        expires_at: chrono::Utc::now() + jwt_config.email_verification_expiry,
+        expires_at,
     };
 
     diesel::insert_into(email_verification_tokens::table)
@@ -308,9 +316,14 @@ async fn send_verification_email(
         .execute(conn)
         .map_err(|e| RegistrationError::EmailSendFailed(e.to_string()))?;
 
-    // Send verification email
-    let mail = verification_email(&user.name, &user.email, &verification_token);
-    send_message(mail, email_config)
+    // Send verification email using the centralized email service
+    email_service
+        .send_verification_email(
+            &user.name,
+            &user.email,
+            &verification_token,
+            &config.server.frontend_url,
+        )
         .map_err(|e| RegistrationError::EmailSendFailed(e.to_string()))?;
 
     info!("Verification email sent to: {}", user.email);
@@ -319,7 +332,7 @@ async fn send_verification_email(
 
 async fn parse_form_data_with_buffered_images(
     payload: &mut Multipart,
-    image_config: &UploadConfig,
+    upload_config: &crate::config::UploadConfig,
 ) -> Result<ParsedFormData, RegistrationError> {
     let mut data = ParsedFormData::new();
 
@@ -357,7 +370,7 @@ async fn parse_form_data_with_buffered_images(
                     if let Some(fname) = filename {
                         // Buffer the image data without processing it
                         let buffered_image =
-                            buffer_image_data(&mut field, &fname, image_config).await?;
+                            buffer_image_data(&mut field, &fname, upload_config).await?;
                         data.buffered_images.push(buffered_image);
                         info!("Buffered image data: {}", fname);
                     }
@@ -379,7 +392,7 @@ async fn parse_form_data_with_buffered_images(
 async fn buffer_image_data(
     field: &mut actix_multipart::Field,
     filename: &str,
-    image_config: &UploadConfig,
+    upload_config: &crate::config::UploadConfig,
 ) -> Result<BufferedImageData, RegistrationError> {
     // Validate file extension early
     let ext = Path::new(filename)
@@ -388,10 +401,10 @@ async fn buffer_image_data(
         .map(|s| s.to_lowercase())
         .unwrap_or_default();
 
-    if !image_config.allowed_extensions.contains(&ext) {
+    if !upload_config.allowed_types.contains(&ext) {
         return Err(RegistrationError::InvalidFileType(
             ext,
-            image_config.allowed_extensions.clone(),
+            upload_config.allowed_types.clone(),
         ));
     }
 
@@ -402,7 +415,7 @@ async fn buffer_image_data(
     while let Some(chunk) = field.try_next().await? {
         file_size += chunk.len();
 
-        if file_size > image_config.max_file_size {
+        if file_size > upload_config.max_size {
             return Err(RegistrationError::FileTooLarge(filename.to_string()));
         }
 
@@ -417,7 +430,7 @@ async fn buffer_image_data(
 
 async fn process_buffered_images(
     parsed_data: ParsedFormData,
-    image_config: &UploadConfig,
+    upload_config: &UploadConfig,
 ) -> Result<RegistrationData, RegistrationError> {
     let mut registration_data = RegistrationData {
         name: parsed_data.name,
@@ -433,7 +446,7 @@ async fn process_buffered_images(
         let processed_image = image_process(
             buffered_image.data,
             buffered_image.filename.clone(),
-            image_config,
+            &upload_config,
         )
         .await
         .map_err(|e| RegistrationError::ImageProcessingError(e.to_string()))?;
