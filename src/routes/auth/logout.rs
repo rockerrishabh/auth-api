@@ -61,38 +61,28 @@ pub async fn logout_user(
         Ok(response) => {
             info!("Logout successful");
 
-            // Create multiple cookies to clear the refresh token in different scenarios
-            // Clear cookie with secure flag (for HTTPS)
-            let secure_cookie = Cookie::build("refresh_token", "")
+            // Create cookies to clear the refresh token with exact matching attributes
+            // Match the attributes used in create_refresh_token_cookie
+            let clear_cookie_secure = Cookie::build("refresh_token", "")
                 .path("/")
                 .max_age(actix_web::cookie::time::Duration::seconds(0))
                 .http_only(true)
                 .secure(true)
-                .same_site(actix_web::cookie::SameSite::Strict)
+                .same_site(actix_web::cookie::SameSite::None)
                 .finish();
 
-            // Clear cookie without secure flag (for HTTP/localhost)
-            let insecure_cookie = Cookie::build("refresh_token", "")
+            // Also create a non-secure version for localhost/HTTP development
+            let clear_cookie_insecure = Cookie::build("refresh_token", "")
                 .path("/")
                 .max_age(actix_web::cookie::time::Duration::seconds(0))
                 .http_only(true)
                 .secure(false)
-                .same_site(actix_web::cookie::SameSite::Strict)
-                .finish();
-
-            // Clear cookie with domain (for subdomains)
-            let domain_cookie = Cookie::build("refresh_token", "")
-                .path("/")
-                .max_age(actix_web::cookie::time::Duration::seconds(0))
-                .http_only(true)
-                .secure(false)
-                .same_site(actix_web::cookie::SameSite::Lax)
+                .same_site(actix_web::cookie::SameSite::None)
                 .finish();
 
             Ok(HttpResponse::Ok()
-                .cookie(secure_cookie)
-                .cookie(insecure_cookie)
-                .cookie(domain_cookie)
+                .cookie(clear_cookie_secure)
+                .cookie(clear_cookie_insecure)
                 .json(response))
         }
         Err(e) => {

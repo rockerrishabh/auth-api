@@ -283,6 +283,6 @@ fn create_refresh_token_cookie(
         .max_age(actix_web::cookie::time::Duration::seconds(max_age))
         .http_only(true)
         .secure(true) // Only send over HTTPS
-        .same_site(actix_web::cookie::SameSite::None)
+        .same_site(actix_web::cookie::SameSite::Lax)
         .finish()
 }
