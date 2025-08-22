@@ -61,16 +61,42 @@ pub async fn logout_user(
         Ok(response) => {
             info!("Logout successful");
 
-            // Create cookie to clear the refresh token
-            let clear_cookie = Cookie::build("refresh_token", "")
+            // Create multiple cookies to clear the refresh token in different scenarios
+            let mut response_builder = HttpResponse::Ok().json(response);
+            
+            // Clear cookie with secure flag (for HTTPS)
+            let secure_cookie = Cookie::build("refresh_token", "")
                 .path("/")
                 .max_age(actix_web::cookie::time::Duration::seconds(0))
                 .http_only(true)
                 .secure(true)
                 .same_site(actix_web::cookie::SameSite::Strict)
                 .finish();
+            
+            // Clear cookie without secure flag (for HTTP/localhost)
+            let insecure_cookie = Cookie::build("refresh_token", "")
+                .path("/")
+                .max_age(actix_web::cookie::time::Duration::seconds(0))
+                .http_only(true)
+                .secure(false)
+                .same_site(actix_web::cookie::SameSite::Strict)
+                .finish();
+            
+            // Clear cookie with domain (for subdomains)
+            let domain_cookie = Cookie::build("refresh_token", "")
+                .path("/")
+                .max_age(actix_web::cookie::time::Duration::seconds(0))
+                .http_only(true)
+                .secure(false)
+                .same_site(actix_web::cookie::SameSite::Lax)
+                .finish();
 
-            Ok(HttpResponse::Ok().cookie(clear_cookie).json(response))
+            response_builder = response_builder
+                .cookie(secure_cookie)
+                .cookie(insecure_cookie)
+                .cookie(domain_cookie);
+
+            Ok(response_builder)
         }
         Err(e) => {
             error!("Logout failed: {}", e);
