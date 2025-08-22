@@ -1,4 +1,4 @@
-use actix_web::{HttpRequest, HttpResponse, Result, cookie::Cookie, post, web, web::Data};
+use actix_web::{cookie::Cookie, post, web, web::Data, HttpRequest, HttpResponse, Result};
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     config::AppConfig,
-    db::{AppState, schema::refresh_tokens},
+    db::{schema::refresh_tokens, AppState},
     utils::password::PasswordService,
 };
 
@@ -62,8 +62,6 @@ pub async fn logout_user(
             info!("Logout successful");
 
             // Create multiple cookies to clear the refresh token in different scenarios
-            let mut response_builder = HttpResponse::Ok().json(response);
-            
             // Clear cookie with secure flag (for HTTPS)
             let secure_cookie = Cookie::build("refresh_token", "")
                 .path("/")
@@ -72,7 +70,7 @@ pub async fn logout_user(
                 .secure(true)
                 .same_site(actix_web::cookie::SameSite::Strict)
                 .finish();
-            
+
             // Clear cookie without secure flag (for HTTP/localhost)
             let insecure_cookie = Cookie::build("refresh_token", "")
                 .path("/")
@@ -81,7 +79,7 @@ pub async fn logout_user(
                 .secure(false)
                 .same_site(actix_web::cookie::SameSite::Strict)
                 .finish();
-            
+
             // Clear cookie with domain (for subdomains)
             let domain_cookie = Cookie::build("refresh_token", "")
                 .path("/")
@@ -91,12 +89,11 @@ pub async fn logout_user(
                 .same_site(actix_web::cookie::SameSite::Lax)
                 .finish();
 
-            response_builder = response_builder
+            Ok(HttpResponse::Ok()
                 .cookie(secure_cookie)
                 .cookie(insecure_cookie)
-                .cookie(domain_cookie);
-
-            Ok(response_builder)
+                .cookie(domain_cookie)
+                .json(response))
         }
         Err(e) => {
             error!("Logout failed: {}", e);
