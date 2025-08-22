@@ -298,10 +298,7 @@ async fn handle_reset_password(
         .map_err(|e| PasswordResetError::DatabaseError(e.to_string()))?;
 
     // Send password change confirmation email
-    if let Err(e) = email_service.send_password_change_confirmation_email(
-        &updated_user,
-        &config.server.frontend_url,
-    ) {
+    if let Err(e) = email_service.send_password_change_confirmation_email(&updated_user) {
         // Log the error but don't fail the password reset
         error!("Failed to send password change confirmation email: {}", e);
     }

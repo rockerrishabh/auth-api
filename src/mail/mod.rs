@@ -10,10 +10,14 @@ use crate::{
     config::EmailConfig,
     db::model::User,
     mail::templates::{
-        password_change_confirmation::{create_password_change_confirmation_html, create_password_change_confirmation_text},
+        password_change_confirmation::{
+            create_password_change_confirmation_html, create_password_change_confirmation_text,
+        },
         password_reset::{create_password_reset_html, create_password_reset_text},
         verification::{create_verification_html, create_verification_text},
-        verification_confirmation::{create_verification_confirmation_html, create_verification_confirmation_text},
+        verification_confirmation::{
+            create_verification_confirmation_html, create_verification_confirmation_text,
+        },
     },
 };
 
@@ -140,7 +144,6 @@ impl EmailService {
     pub fn send_password_change_confirmation_email(
         &self,
         user: &User,
-        frontend_url: &str,
     ) -> Result<Response, EmailError> {
         let html_body = create_password_change_confirmation_html(user);
         let text_body = create_password_change_confirmation_text(user);
@@ -159,7 +162,6 @@ impl EmailService {
     pub fn send_verification_confirmation_email(
         &self,
         user: &User,
-        frontend_url: &str,
     ) -> Result<Response, EmailError> {
         let html_body = create_verification_confirmation_html(user);
         let text_body = create_verification_confirmation_text(user);

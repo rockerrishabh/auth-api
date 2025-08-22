@@ -222,10 +222,7 @@ async fn handle_verify_email(
         .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
 
     // Send verification confirmation email
-    if let Err(e) = email_service.send_verification_confirmation_email(
-        &updated_user,
-        &config.server.frontend_url,
-    ) {
+    if let Err(e) = email_service.send_verification_confirmation_email(&updated_user) {
         // Log the error but don't fail the verification
         error!("Failed to send verification confirmation email: {}", e);
     }
