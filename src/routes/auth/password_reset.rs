@@ -119,10 +119,11 @@ pub async fn reset_password(
     request: web::Json<ResetPasswordRequest>,
     pool: Data<AppState>,
     config: Data<AppConfig>,
+    email_service: Data<EmailService>,
 ) -> Result<HttpResponse> {
     info!("Password reset attempt");
 
-    match handle_reset_password(request.into_inner(), &pool, &config).await {
+    match handle_reset_password(request.into_inner(), &pool, &config, &email_service).await {
         Ok(response) => {
             info!("Password reset successful");
             Ok(HttpResponse::Ok().json(response))
@@ -202,6 +203,7 @@ async fn handle_reset_password(
     request: ResetPasswordRequest,
     pool: &AppState,
     config: &AppConfig,
+    email_service: &EmailService,
 ) -> Result<PasswordResetResponse, PasswordResetError> {
     // Verify the JWT reset token
     let token_data = config
@@ -287,6 +289,22 @@ async fn handle_reset_password(
 
     // Clean up old password reset tokens
     cleanup_old_password_reset_tokens(&user_id, &mut conn).await?;
+
+    // Get the updated user to send confirmation email
+    let updated_user = users::table
+        .filter(users::id.eq(&user_id))
+        .select(User::as_select())
+        .first::<User>(&mut conn)
+        .map_err(|e| PasswordResetError::DatabaseError(e.to_string()))?;
+
+    // Send password change confirmation email
+    if let Err(e) = email_service.send_password_change_confirmation_email(
+        &updated_user,
+        &config.server.frontend_url,
+    ) {
+        // Log the error but don't fail the password reset
+        error!("Failed to send password change confirmation email: {}", e);
+    }
 
     Ok(PasswordResetResponse {
         message: "Password reset successfully".to_string(),

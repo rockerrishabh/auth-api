@@ -83,6 +83,7 @@ pub async fn verify_email(
     query: web::Query<std::collections::HashMap<String, String>>,
     pool: Data<AppState>,
     config: Data<AppConfig>,
+    email_service: Data<EmailService>,
 ) -> Result<HttpResponse> {
     let token = query.get("token").cloned().unwrap_or_default();
 
@@ -95,7 +96,7 @@ pub async fn verify_email(
 
     info!("Email verification attempt");
 
-    match handle_verify_email(token, &pool, &config).await {
+    match handle_verify_email(token, &pool, &config, &email_service).await {
         Ok(response) => {
             info!("Email verification successful");
             Ok(HttpResponse::Ok().json(response))
@@ -132,6 +133,7 @@ async fn handle_verify_email(
     token: String,
     pool: &AppState,
     config: &AppConfig,
+    email_service: &EmailService,
 ) -> Result<VerificationResponse, VerificationError> {
     // Verify the JWT verification token
     let token_data = config
@@ -211,6 +213,22 @@ async fn handle_verify_email(
 
     // Clean up old verification tokens
     cleanup_old_verification_tokens(&user_id, &mut conn).await?;
+
+    // Get the updated user to send confirmation email
+    let updated_user = users::table
+        .filter(users::id.eq(&user_id))
+        .select(User::as_select())
+        .first::<User>(&mut conn)
+        .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+    // Send verification confirmation email
+    if let Err(e) = email_service.send_verification_confirmation_email(
+        &updated_user,
+        &config.server.frontend_url,
+    ) {
+        // Log the error but don't fail the verification
+        error!("Failed to send verification confirmation email: {}", e);
+    }
 
     Ok(VerificationResponse {
         message: "Email verified successfully".to_string(),

@@ -8,9 +8,12 @@ use lettre::{
 
 use crate::{
     config::EmailConfig,
+    db::model::User,
     mail::templates::{
+        password_change_confirmation::{create_password_change_confirmation_html, create_password_change_confirmation_text},
         password_reset::{create_password_reset_html, create_password_reset_text},
         verification::{create_verification_html, create_verification_text},
+        verification_confirmation::{create_verification_confirmation_html, create_verification_confirmation_text},
     },
 };
 
@@ -127,6 +130,44 @@ impl EmailService {
             to_name: name.to_string(),
             to_email: email.to_string(),
             subject: "Password Reset Request".to_string(),
+            html_body,
+            text_body: Some(text_body),
+        };
+
+        self.send_message(email_message)
+    }
+
+    pub fn send_password_change_confirmation_email(
+        &self,
+        user: &User,
+        frontend_url: &str,
+    ) -> Result<Response, EmailError> {
+        let html_body = create_password_change_confirmation_html(user);
+        let text_body = create_password_change_confirmation_text(user);
+
+        let email_message = EmailMessage {
+            to_name: user.name.clone(),
+            to_email: user.email.clone(),
+            subject: "Password Changed Successfully".to_string(),
+            html_body,
+            text_body: Some(text_body),
+        };
+
+        self.send_message(email_message)
+    }
+
+    pub fn send_verification_confirmation_email(
+        &self,
+        user: &User,
+        frontend_url: &str,
+    ) -> Result<Response, EmailError> {
+        let html_body = create_verification_confirmation_html(user);
+        let text_body = create_verification_confirmation_text(user);
+
+        let email_message = EmailMessage {
+            to_name: user.name.clone(),
+            to_email: user.email.clone(),
+            subject: "Email Verified Successfully!".to_string(),
             html_body,
             text_body: Some(text_body),
         };
