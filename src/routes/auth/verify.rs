@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, Result, get, post, web, web::Data};
+use actix_web::{get, post, web, web::Data, HttpResponse, Result};
 use chrono::{Duration, Utc};
 use diesel::{
     BoolExpressionMethods, ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl,
@@ -11,9 +11,9 @@ use thiserror::Error;
 use crate::{
     config::AppConfig,
     db::{
-        AppState,
         model::{EmailVerificationToken, NewEmailVerificationToken, User},
         schema::{email_verification_tokens, users},
+        AppState,
     },
     mail::EmailService,
     utils::password::PasswordService,
@@ -133,11 +133,16 @@ async fn handle_verify_email(
     pool: &AppState,
     config: &AppConfig,
 ) -> Result<VerificationResponse, VerificationError> {
-    // Verify the verification token
+    // Verify the JWT verification token
     let token_data = config
         .jwt
         .verify_token(&token)
         .map_err(|_| VerificationError::InvalidToken)?;
+
+    // Check if this is an email verification token
+    if token_data.claims.purpose != crate::config::TokenType::EmailVerification {
+        return Err(VerificationError::InvalidToken);
+    }
 
     let user_id = &token_data.claims.sub;
 
@@ -160,16 +165,16 @@ async fn handle_verify_email(
         return Err(VerificationError::AlreadyVerified);
     }
 
-    // Find all verification tokens for this user (including expired/used ones for better error messages)
-    let all_stored_tokens: Vec<EmailVerificationToken> = email_verification_tokens::table
+    // Find verification tokens for this user
+    let stored_tokens: Vec<EmailVerificationToken> = email_verification_tokens::table
         .filter(email_verification_tokens::user_id.eq(&user_id))
         .select(EmailVerificationToken::as_select())
         .load(&mut conn)
         .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
 
-    // Find the matching token and check its status
+    // Find a matching token by checking if any stored hash matches the current token
     let mut matching_token: Option<&EmailVerificationToken> = None;
-    for stored_token in &all_stored_tokens {
+    for stored_token in &stored_tokens {
         if PasswordService::verify_password(&token, &stored_token.token_hash).unwrap_or(false) {
             matching_token = Some(stored_token);
             break;
@@ -252,7 +257,7 @@ async fn handle_resend_verification(
     let new_verification_token = NewEmailVerificationToken {
         user_id: user.id,
         token_hash: &token_hash,
-        expires_at: Utc::now() + Duration::seconds(config.jwt.expires_in),
+        expires_at: Utc::now() + Duration::seconds(config.jwt.verification_token_expires_in),
     };
 
     diesel::insert_into(email_verification_tokens::table)

@@ -2,18 +2,19 @@ use chrono::DateTime;
 use chrono::offset::Utc;
 use diesel::Selectable;
 use diesel::prelude::{Insertable, Queryable};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::db::schema::{email_verification_tokens, password_reset_tokens, refresh_tokens, users};
 
-#[derive(diesel_derive_enum::DbEnum, Debug)]
+#[derive(diesel_derive_enum::DbEnum, Debug, Clone, Serialize, Deserialize)]
 #[db_enum(existing_type_path = "crate::db::schema::sql_types::UserRole")]
 pub enum UserRole {
     Admin,
     User,
 }
 
-#[derive(Queryable, Debug, Selectable)]
+#[derive(Queryable, Debug, Selectable, Serialize, Deserialize)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct User {
@@ -40,7 +41,7 @@ pub struct NewUser<'a> {
 }
 
 // Refresh Token Model
-#[derive(Queryable, Debug, Selectable)]
+#[derive(Queryable, Debug, Selectable, Serialize, Deserialize)]
 #[diesel(table_name = refresh_tokens)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct RefreshToken {
@@ -61,7 +62,7 @@ pub struct NewRefreshToken<'a> {
 }
 
 // Password Reset Token Model
-#[derive(Queryable, Debug, Selectable)]
+#[derive(Queryable, Debug, Selectable, Serialize, Deserialize)]
 #[diesel(table_name = password_reset_tokens)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct PasswordResetToken {
@@ -82,7 +83,7 @@ pub struct NewPasswordResetToken<'a> {
 }
 
 // Email Verification Token Model
-#[derive(Queryable, Debug, Selectable)]
+#[derive(Queryable, Debug, Selectable, Serialize, Deserialize)]
 #[diesel(table_name = email_verification_tokens)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct EmailVerificationToken {

@@ -1,4 +1,4 @@
-use actix_web::{HttpRequest, HttpResponse, Result, cookie::Cookie, post, web::Data};
+use actix_web::{cookie::Cookie, post, web::Data, HttpRequest, HttpResponse, Result};
 use chrono::{Duration, Utc};
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use log::{error, info};
@@ -8,9 +8,9 @@ use thiserror::Error;
 use crate::{
     config::AppConfig,
     db::{
-        AppState,
         model::{NewRefreshToken, RefreshToken, User},
         schema::{refresh_tokens, users},
+        AppState,
     },
     utils::password::PasswordService,
 };
@@ -173,7 +173,7 @@ async fn handle_refresh(
     let new_refresh_token_record = NewRefreshToken {
         user_id: user.id,
         token_hash: &token_hash,
-        expires_at: Utc::now() + Duration::seconds(config.jwt.expires_in),
+        expires_at: Utc::now() + Duration::seconds(config.jwt.refresh_token_expires_in),
     };
 
     diesel::insert_into(refresh_tokens::table)
@@ -187,7 +187,7 @@ async fn handle_refresh(
     let response = RefreshResponse {
         message: "Token refreshed successfully".to_string(),
         access_token: new_access_token,
-        expires_in: config.jwt.expires_in,
+        expires_in: config.jwt.access_token_expires_in,
     };
 
     Ok((response, new_refresh_token))
@@ -232,7 +232,7 @@ async fn cleanup_old_refresh_tokens(
 }
 
 fn create_refresh_token_cookie(token_value: &str, config: &AppConfig) -> Cookie<'static> {
-    let max_age = config.jwt.expires_in;
+    let max_age = config.jwt.access_token_expires_in;
 
     Cookie::build("refresh_token", token_value.to_string())
         .path("/")

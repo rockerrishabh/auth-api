@@ -33,7 +33,10 @@ pub struct ServerConfig {
 #[derive(Debug, Clone)]
 pub struct JwtConfig {
     pub secret: String,
-    pub expires_in: i64,
+    pub access_token_expires_in: i64,      // Access token expiration (short)
+    pub refresh_token_expires_in: i64,     // Refresh token expiration (long)
+    pub verification_token_expires_in: i64, // Email verification expiration (medium)
+    pub reset_token_expires_in: i64,       // Password reset expiration (short)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -99,10 +102,25 @@ impl JwtConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
         Ok(JwtConfig {
             secret: get_env_var("JWT_SECRET")?,
-            expires_in: get_env_var_or_default("JWT_EXPIRES_IN", "3600")
+            access_token_expires_in: get_env_var_or_default("JWT_ACCESS_TOKEN_EXPIRES_IN", "3600")
                 .parse()
                 .map_err(|_| {
-                    ConfigError::InvalidFormat("JWT_EXPIRES_IN must be a valid number".into())
+                    ConfigError::InvalidFormat("JWT_ACCESS_TOKEN_EXPIRES_IN must be a valid number".into())
+                })?,
+            refresh_token_expires_in: get_env_var_or_default("JWT_REFRESH_TOKEN_EXPIRES_IN", "86400")
+                .parse()
+                .map_err(|_| {
+                    ConfigError::InvalidFormat("JWT_REFRESH_TOKEN_EXPIRES_IN must be a valid number".into())
+                })?,
+            verification_token_expires_in: get_env_var_or_default("JWT_VERIFICATION_TOKEN_EXPIRES_IN", "3600")
+                .parse()
+                .map_err(|_| {
+                    ConfigError::InvalidFormat("JWT_VERIFICATION_TOKEN_EXPIRES_IN must be a valid number".into())
+                })?,
+            reset_token_expires_in: get_env_var_or_default("JWT_RESET_TOKEN_EXPIRES_IN", "3600")
+                .parse()
+                .map_err(|_| {
+                    ConfigError::InvalidFormat("JWT_RESET_TOKEN_EXPIRES_IN must be a valid number".into())
                 })?,
         })
     }
@@ -192,7 +210,7 @@ impl JwtConfig {
         let claims = Claims {
             sub: user_id,
             email: email.to_string(),
-            exp: (now + Duration::seconds(self.expires_in)).timestamp(),
+            exp: (now + Duration::seconds(self.verification_token_expires_in)).timestamp(),
             iat: now.timestamp(),
             purpose: TokenType::EmailVerification,
         };
@@ -214,7 +232,7 @@ impl JwtConfig {
         let claims = Claims {
             sub: user_id,
             email: email.to_string(),
-            exp: (now + Duration::seconds(self.expires_in)).timestamp(),
+            exp: (now + Duration::seconds(self.reset_token_expires_in)).timestamp(),
             iat: now.timestamp(),
             purpose: TokenType::PasswordReset,
         };
@@ -246,7 +264,7 @@ impl JwtConfig {
         let claims = Claims {
             sub: user_id,
             email: email.to_string(),
-            exp: (now + Duration::seconds(self.expires_in)).timestamp(),
+            exp: (now + Duration::seconds(self.access_token_expires_in)).timestamp(),
             iat: now.timestamp(),
             purpose: TokenType::Access,
         };
@@ -267,7 +285,7 @@ impl JwtConfig {
         let claims = Claims {
             sub: user_id,
             email: email.to_string(),
-            exp: (now + Duration::seconds(self.expires_in)).timestamp(),
+            exp: (now + Duration::seconds(self.refresh_token_expires_in)).timestamp(),
             iat: now.timestamp(),
             purpose: TokenType::Refresh,
         };

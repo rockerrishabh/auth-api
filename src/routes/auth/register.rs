@@ -221,11 +221,15 @@ async fn handle_registration(
     Ok(HttpResponse::Created().json(serde_json::json!({
         "message": "User registered successfully. Please check your email to verify your account.",
         "user": {
-            "id": user.id,
+            "id": user.id.to_string(),
             "name": user.name,
             "email": user.email,
+            "role": format!("{:?}", user.role).to_lowercase(),
             "avatar": user.avatar,
-            "email_verified": user.email_verified
+            "avatar_thumbnail": user.avatar_thumbnail,
+            "email_verified": user.email_verified,
+            "created_at": user.created_at.to_rfc3339(),
+            "updated_at": user.updated_at.map(|dt| dt.to_rfc3339())
         }
     })))
 }

@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, Result, cookie::Cookie, post, web, web::Data};
+use actix_web::{cookie::Cookie, post, web, web::Data, HttpResponse, Result};
 use chrono::Utc;
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use log::{error, info};
@@ -8,9 +8,9 @@ use thiserror::Error;
 use crate::{
     config::AppConfig,
     db::{
-        AppState,
         model::{NewRefreshToken, User},
         schema::{refresh_tokens, users},
+        AppState,
     },
     utils::password::PasswordService,
 };
@@ -76,7 +76,10 @@ pub struct UserInfo {
     pub name: String,
     pub role: String,
     pub avatar: Option<String>,
+    pub avatar_thumbnail: Option<String>,
     pub email_verified: bool,
+    pub created_at: String,
+    pub updated_at: Option<String>,
 }
 
 #[post("/login")]
@@ -178,10 +181,13 @@ async fn handle_login(
             name: user.name,
             role: role_str,
             avatar: user.avatar,
+            avatar_thumbnail: user.avatar_thumbnail,
             email_verified: user.email_verified,
+            created_at: user.created_at.to_rfc3339(),
+            updated_at: user.updated_at.map(|dt| dt.to_rfc3339()),
         },
         access_token,
-        expires_in: config.jwt.expires_in,
+        expires_in: config.jwt.access_token_expires_in,
     };
 
     Ok((response, refresh_token, remember_me))
@@ -200,11 +206,11 @@ async fn store_refresh_token(
     let token_hash =
         PasswordService::hash_password(token).map_err(|e| LoginError::TokenError(e.to_string()))?;
 
-    // Extend expiry time if remember_me is true (90 days instead of 30)
+    // Extend expiry time if remember_me is true (90 days instead of default refresh token expiry)
     let expiry_duration = if remember_me {
         chrono::Duration::days(90)
     } else {
-        chrono::Duration::seconds(config.jwt.expires_in)
+        chrono::Duration::seconds(config.jwt.refresh_token_expires_in)
     };
 
     let new_refresh_token = NewRefreshToken {
@@ -268,8 +274,8 @@ fn create_refresh_token_cookie(
         // 90 days in seconds
         90 * 24 * 60 * 60
     } else {
-        // 30 days in seconds (default refresh token expiry)
-        config.jwt.expires_in
+        // Use configured refresh token expiry
+        config.jwt.refresh_token_expires_in
     };
 
     Cookie::build("refresh_token", refresh_token.to_string())
@@ -277,6 +283,6 @@ fn create_refresh_token_cookie(
         .max_age(actix_web::cookie::time::Duration::seconds(max_age))
         .http_only(true)
         .secure(true) // Only send over HTTPS
-        .same_site(actix_web::cookie::SameSite::Strict)
+        .same_site(actix_web::cookie::SameSite::None)
         .finish()
 }

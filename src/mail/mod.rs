@@ -1,14 +1,17 @@
 pub mod templates;
 
 use lettre::{
+    message::{header::ContentType, Mailbox, MultiPart, SinglePart},
+    transport::smtp::{authentication::Credentials, response::Response, Error as SmtpError},
     Message, SmtpTransport, Transport,
-    message::{Mailbox, MultiPart, SinglePart, header::ContentType},
-    transport::smtp::{Error as SmtpError, authentication::Credentials, response::Response},
 };
 
 use crate::{
     config::EmailConfig,
-    mail::templates::verification::{create_verification_html, create_verification_text},
+    mail::templates::{
+        password_reset::{create_password_reset_html, create_password_reset_text},
+        verification::{create_verification_html, create_verification_text},
+    },
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -92,7 +95,7 @@ impl EmailService {
         verification_token: &str,
         frontend_url: &str,
     ) -> Result<Response, EmailError> {
-        let verification_url = format!("{}/auth/verify?token={}", frontend_url, verification_token);
+        let verification_url = format!("{}/verify?token={}", frontend_url, verification_token);
 
         let html_body = create_verification_html(name, &verification_url);
         let text_body = create_verification_text(name, &verification_url);
@@ -101,6 +104,29 @@ impl EmailService {
             to_name: name.to_string(),
             to_email: email.to_string(),
             subject: "Please verify your email address".to_string(),
+            html_body,
+            text_body: Some(text_body),
+        };
+
+        self.send_message(email_message)
+    }
+
+    pub fn send_password_reset_email(
+        &self,
+        name: &str,
+        email: &str,
+        reset_token: &str,
+        frontend_url: &str,
+    ) -> Result<Response, EmailError> {
+        let reset_url = format!("{}/reset-password?token={}", frontend_url, reset_token);
+
+        let html_body = create_password_reset_html(name, &reset_url);
+        let text_body = create_password_reset_text(name, &reset_url);
+
+        let email_message = EmailMessage {
+            to_name: name.to_string(),
+            to_email: email.to_string(),
+            subject: "Password Reset Request".to_string(),
             html_body,
             text_body: Some(text_body),
         };

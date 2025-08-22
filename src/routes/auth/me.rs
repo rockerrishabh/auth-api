@@ -1,4 +1,4 @@
-use actix_web::{HttpRequest, HttpResponse, Result, get, web::Data};
+use actix_web::{get, web::Data, HttpRequest, HttpResponse, Result};
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use log::{error, info};
 use serde::Serialize;
@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     config::AppConfig,
-    db::{AppState, model::User, schema::users},
+    db::{model::User, schema::users, AppState},
 };
 
 #[derive(Error, Debug)]
@@ -57,11 +57,6 @@ pub struct UserProfile {
     pub updated_at: Option<String>,
 }
 
-#[derive(Serialize)]
-pub struct MeResponse {
-    pub user: UserProfile,
-}
-
 #[get("/me")]
 pub async fn get_user_profile(
     req: HttpRequest,
@@ -86,7 +81,7 @@ async fn handle_me(
     req: HttpRequest,
     pool: &AppState,
     config: &AppConfig,
-) -> Result<MeResponse, MeError> {
+) -> Result<UserProfile, MeError> {
     // Extract access token from Authorization header
     let auth_header = req
         .headers()
@@ -130,5 +125,5 @@ async fn handle_me(
         updated_at: user.updated_at.map(|dt| dt.to_rfc3339()),
     };
 
-    Ok(MeResponse { user: user_profile })
+    Ok(user_profile)
 }

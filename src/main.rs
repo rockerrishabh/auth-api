@@ -47,9 +47,12 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin(&frontend_url)
-            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
-            .allowed_headers(vec![header::AUTHORIZATION, header::ACCEPT])
-            .allowed_header(header::CONTENT_TYPE)
+            .allowed_origin("http://localhost:3000")
+            .allowed_origin("http://localhost:5173") // Vite dev server
+            .allowed_origin("http://localhost:4173") // Vite preview server
+            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+            .allowed_headers(vec![header::AUTHORIZATION, header::ACCEPT, header::CONTENT_TYPE])
+            .supports_credentials()
             .max_age(3600);
 
         App::new()
