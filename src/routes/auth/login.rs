@@ -1,5 +1,5 @@
 use actix_web::{cookie::Cookie, post, web, web::Data, HttpResponse, Result};
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
@@ -242,7 +242,18 @@ async fn cleanup_old_refresh_tokens(
     .execute(conn)
     .map_err(|e| LoginError::DatabaseError(e.to_string()))?;
 
-    // Keep only the 5 most recent tokens per user
+    // Delete revoked tokens older than 7 days (keep recent ones for audit)
+    let seven_days_ago = Utc::now() - Duration::days(7);
+    diesel::delete(
+        refresh_tokens::table
+            .filter(refresh_tokens::user_id.eq(user_id))
+            .filter(refresh_tokens::revoked.eq(true))
+            .filter(refresh_tokens::created_at.lt(seven_days_ago)),
+    )
+    .execute(conn)
+    .map_err(|e| LoginError::DatabaseError(e.to_string()))?;
+
+    // Keep only the 5 most recent non-revoked tokens per user
     let tokens_to_keep: Vec<uuid::Uuid> = refresh_tokens::table
         .filter(refresh_tokens::user_id.eq(user_id))
         .filter(refresh_tokens::revoked.eq(false))
@@ -256,6 +267,7 @@ async fn cleanup_old_refresh_tokens(
         diesel::delete(
             refresh_tokens::table
                 .filter(refresh_tokens::user_id.eq(user_id))
+                .filter(refresh_tokens::revoked.eq(false))
                 .filter(refresh_tokens::id.ne_all(&tokens_to_keep)),
         )
         .execute(conn)
