@@ -64,25 +64,16 @@ pub async fn logout_user(
             // Create cookies to clear the refresh token with exact matching attributes
             // Match the attributes used in create_refresh_token_cookie
             let clear_cookie_secure = Cookie::build("refresh_token", "")
+                .domain(config.jwt.domain.clone())
                 .path("/")
                 .max_age(actix_web::cookie::time::Duration::seconds(0))
                 .http_only(true)
                 .secure(true)
-                .same_site(actix_web::cookie::SameSite::None)
-                .finish();
-
-            // Also create a non-secure version for localhost/HTTP development
-            let clear_cookie_insecure = Cookie::build("refresh_token", "")
-                .path("/")
-                .max_age(actix_web::cookie::time::Duration::seconds(0))
-                .http_only(true)
-                .secure(false)
-                .same_site(actix_web::cookie::SameSite::None)
+                .same_site(actix_web::cookie::SameSite::Lax)
                 .finish();
 
             Ok(HttpResponse::Ok()
                 .cookie(clear_cookie_secure)
-                .cookie(clear_cookie_insecure)
                 .json(response))
         }
         Err(e) => {
