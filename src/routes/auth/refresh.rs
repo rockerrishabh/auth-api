@@ -232,8 +232,7 @@ async fn cleanup_old_refresh_tokens(
 }
 
 fn create_refresh_token_cookie(token_value: &str, config: &AppConfig) -> Cookie<'static> {
-    // Use refresh token expiry instead of access token expiry for cookie duration
-    let max_age = config.jwt.refresh_token_expires_in;
+    let max_age = config.jwt.access_token_expires_in;
 
     Cookie::build("refresh_token", token_value.to_string())
         .domain(config.jwt.domain.clone())
