@@ -1,7 +1,7 @@
-use actix_web::{cookie::Cookie, post, web, web::Data, HttpRequest, HttpResponse, Result};
+use actix_web::{cookie::Cookie, post, web::Data, HttpRequest, HttpResponse, Result};
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use log::{error, info};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
@@ -38,11 +38,6 @@ impl LogoutError {
     }
 }
 
-#[derive(Deserialize)]
-pub struct LogoutRequest {
-    pub logout_all: Option<bool>,
-}
-
 #[derive(Serialize)]
 pub struct LogoutResponse {
     pub message: String,
@@ -51,13 +46,12 @@ pub struct LogoutResponse {
 #[post("/logout")]
 pub async fn logout_user(
     req: HttpRequest,
-    logout_data: web::Json<LogoutRequest>,
     pool: Data<AppState>,
     config: Data<AppConfig>,
 ) -> Result<HttpResponse> {
     info!("Logout attempt");
 
-    match handle_logout(req, logout_data.into_inner(), &pool, &config).await {
+    match handle_logout(req, &pool, &config).await {
         Ok(response) => {
             info!("Logout successful");
 
@@ -85,7 +79,6 @@ pub async fn logout_user(
 
 async fn handle_logout(
     req: HttpRequest,
-    logout_data: LogoutRequest,
     pool: &AppState,
     config: &AppConfig,
 ) -> Result<LogoutResponse, LogoutError> {
@@ -111,57 +104,35 @@ async fn handle_logout(
         .get()
         .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
 
-    if logout_data.logout_all.unwrap_or(false) {
-        // Revoke all refresh tokens for this user
-        diesel::update(
-            refresh_tokens::table
-                .filter(refresh_tokens::user_id.eq(&user_id))
-                .filter(refresh_tokens::revoked.eq(false)),
-        )
-        .set(refresh_tokens::revoked.eq(true))
-        .execute(&mut conn)
-        .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
+    // Get refresh token from cookie
+    let refresh_token = req.cookie("refresh_token").map(|c| c.value().to_string());
 
-        info!("All sessions logged out for user: {}", user_id);
+    if let Some(refresh_token) = refresh_token {
+        // Revoke specific refresh token
+        let stored_tokens: Vec<(uuid::Uuid, String)> = refresh_tokens::table
+            .filter(refresh_tokens::user_id.eq(&user_id))
+            .filter(refresh_tokens::revoked.eq(false))
+            .select((refresh_tokens::id, refresh_tokens::token_hash))
+            .load(&mut conn)
+            .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
 
-        Ok(LogoutResponse {
-            message: "Successfully logged out from all devices".to_string(),
-        })
-    } else {
-        // Get refresh token from cookie
-        let refresh_token = req.cookie("refresh_token").map(|c| c.value().to_string());
+        // Find and revoke the matching token
+        for (token_id, token_hash) in stored_tokens {
+            if PasswordService::verify_password(&refresh_token, &token_hash).unwrap_or(false) {
+                diesel::update(refresh_tokens::table.filter(refresh_tokens::id.eq(&token_id)))
+                    .set(refresh_tokens::revoked.eq(true))
+                    .execute(&mut conn)
+                    .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
 
-        if let Some(refresh_token) = refresh_token {
-            // Revoke specific refresh token
-            let stored_tokens: Vec<(uuid::Uuid, String)> = refresh_tokens::table
-                .filter(refresh_tokens::user_id.eq(&user_id))
-                .filter(refresh_tokens::revoked.eq(false))
-                .select((refresh_tokens::id, refresh_tokens::token_hash))
-                .load(&mut conn)
-                .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
-
-            // Find and revoke the matching token
-            for (token_id, token_hash) in stored_tokens {
-                if PasswordService::verify_password(&refresh_token, &token_hash).unwrap_or(false) {
-                    diesel::update(refresh_tokens::table.filter(refresh_tokens::id.eq(&token_id)))
-                        .set(refresh_tokens::revoked.eq(true))
-                        .execute(&mut conn)
-                        .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
-
-                    info!("Specific session logged out for user: {}", user_id);
-
-                    return Ok(LogoutResponse {
-                        message: "Successfully logged out".to_string(),
-                    });
-                }
+                info!("Specific session logged out for user: {}", user_id);
+                break;
             }
         }
-
-        // No refresh token found or token didn't match, just acknowledge the logout
-        info!("Access token logout for user: {}", user_id);
-
-        Ok(LogoutResponse {
-            message: "Successfully logged out".to_string(),
-        })
     }
+
+    // Acknowledge logout regardless of cookie presence
+    info!("Access token logout for user: {}", user_id);
+    Ok(LogoutResponse {
+        message: "Successfully logged out".to_string(),
+    })
 }
