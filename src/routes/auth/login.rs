@@ -279,6 +279,7 @@ fn create_refresh_token_cookie(
     };
 
     Cookie::build("refresh_token", refresh_token.to_string())
+        .domain(config.jwt.domain.clone())
         .path("/")
         .max_age(actix_web::cookie::time::Duration::seconds(max_age))
         .http_only(true)

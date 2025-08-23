@@ -1,5 +1,5 @@
 use chrono::{Duration, Utc};
-use jsonwebtoken::{DecodingKey, EncodingKey, Header, TokenData, Validation, decode, encode};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use serde::{Deserialize, Serialize};
 use std::env;
 use uuid::Uuid;
@@ -32,11 +32,12 @@ pub struct ServerConfig {
 
 #[derive(Debug, Clone)]
 pub struct JwtConfig {
+    pub domain: String,
     pub secret: String,
-    pub access_token_expires_in: i64,      // Access token expiration (short)
-    pub refresh_token_expires_in: i64,     // Refresh token expiration (long)
+    pub access_token_expires_in: i64, // Access token expiration (short)
+    pub refresh_token_expires_in: i64, // Refresh token expiration (long)
     pub verification_token_expires_in: i64, // Email verification expiration (medium)
-    pub reset_token_expires_in: i64,       // Password reset expiration (short)
+    pub reset_token_expires_in: i64,  // Password reset expiration (short)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -101,26 +102,41 @@ impl ServerConfig {
 impl JwtConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
         Ok(JwtConfig {
+            domain: get_env_var("JWT_DOMAIN")?,
             secret: get_env_var("JWT_SECRET")?,
             access_token_expires_in: get_env_var_or_default("JWT_ACCESS_TOKEN_EXPIRES_IN", "3600")
                 .parse()
                 .map_err(|_| {
-                    ConfigError::InvalidFormat("JWT_ACCESS_TOKEN_EXPIRES_IN must be a valid number".into())
+                    ConfigError::InvalidFormat(
+                        "JWT_ACCESS_TOKEN_EXPIRES_IN must be a valid number".into(),
+                    )
                 })?,
-            refresh_token_expires_in: get_env_var_or_default("JWT_REFRESH_TOKEN_EXPIRES_IN", "86400")
-                .parse()
-                .map_err(|_| {
-                    ConfigError::InvalidFormat("JWT_REFRESH_TOKEN_EXPIRES_IN must be a valid number".into())
-                })?,
-            verification_token_expires_in: get_env_var_or_default("JWT_VERIFICATION_TOKEN_EXPIRES_IN", "3600")
-                .parse()
-                .map_err(|_| {
-                    ConfigError::InvalidFormat("JWT_VERIFICATION_TOKEN_EXPIRES_IN must be a valid number".into())
-                })?,
+            refresh_token_expires_in: get_env_var_or_default(
+                "JWT_REFRESH_TOKEN_EXPIRES_IN",
+                "86400",
+            )
+            .parse()
+            .map_err(|_| {
+                ConfigError::InvalidFormat(
+                    "JWT_REFRESH_TOKEN_EXPIRES_IN must be a valid number".into(),
+                )
+            })?,
+            verification_token_expires_in: get_env_var_or_default(
+                "JWT_VERIFICATION_TOKEN_EXPIRES_IN",
+                "3600",
+            )
+            .parse()
+            .map_err(|_| {
+                ConfigError::InvalidFormat(
+                    "JWT_VERIFICATION_TOKEN_EXPIRES_IN must be a valid number".into(),
+                )
+            })?,
             reset_token_expires_in: get_env_var_or_default("JWT_RESET_TOKEN_EXPIRES_IN", "3600")
                 .parse()
                 .map_err(|_| {
-                    ConfigError::InvalidFormat("JWT_RESET_TOKEN_EXPIRES_IN must be a valid number".into())
+                    ConfigError::InvalidFormat(
+                        "JWT_RESET_TOKEN_EXPIRES_IN must be a valid number".into(),
+                    )
                 })?,
         })
     }
@@ -204,7 +220,7 @@ impl JwtConfig {
         email: &str,
     ) -> Result<String, String> {
         use chrono::{Duration, Utc};
-        use jsonwebtoken::{EncodingKey, Header, encode};
+        use jsonwebtoken::{encode, EncodingKey, Header};
 
         let now = Utc::now();
         let claims = Claims {
