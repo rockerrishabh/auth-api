@@ -12,22 +12,13 @@ use crate::{
 
 #[derive(Error, Debug)]
 pub enum LogoutError {
-    #[error("Invalid token")]
-    InvalidToken,
     #[error("Database error: {0}")]
     DatabaseError(String),
-    #[error("Missing authorization header")]
-    MissingAuth,
 }
 
 impl LogoutError {
     pub fn to_http_response(&self) -> HttpResponse {
         match self {
-            LogoutError::InvalidToken | LogoutError::MissingAuth => HttpResponse::Unauthorized()
-                .json(serde_json::json!({
-                    "error": "Invalid token",
-                    "message": "Invalid or missing authentication token"
-                })),
             LogoutError::DatabaseError(_) => {
                 HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "Internal server error",
@@ -82,21 +73,14 @@ async fn handle_logout(
     pool: &AppState,
     config: &AppConfig,
 ) -> Result<LogoutResponse, LogoutError> {
-    // Extract access token from Authorization header
-    let auth_header = req
+    // Best-effort: try to derive user from Authorization header, but do not fail if missing/invalid
+    let auth_sub: Option<uuid::Uuid> = req
         .headers()
         .get("Authorization")
         .and_then(|h| h.to_str().ok())
         .and_then(|h| h.strip_prefix("Bearer "))
-        .ok_or(LogoutError::MissingAuth)?;
-
-    // Verify access token to get user ID
-    let token_data = config
-        .jwt
-        .verify_token(auth_header)
-        .map_err(|_| LogoutError::InvalidToken)?;
-
-    let user_id = &token_data.claims.sub;
+        .and_then(|t| config.jwt.verify_token(t).ok())
+        .map(|d| d.claims.sub);
 
     // Get database connection
     let mut conn = pool
@@ -109,9 +93,18 @@ async fn handle_logout(
 
     if let Some(refresh_token) = refresh_token {
         // Revoke specific refresh token
-        let stored_tokens: Vec<(uuid::Uuid, String)> = refresh_tokens::table
-            .filter(refresh_tokens::user_id.eq(&user_id))
+        let mut query = refresh_tokens::table
             .filter(refresh_tokens::revoked.eq(false))
+            .into_boxed();
+
+        if let Some(sub) = auth_sub.as_ref() {
+            query = query.filter(refresh_tokens::user_id.eq(sub));
+        } else if let Ok(data) = config.jwt.verify_token(&refresh_token) {
+            let sub = data.claims.sub;
+            query = query.filter(refresh_tokens::user_id.eq(sub));
+        }
+
+        let stored_tokens: Vec<(uuid::Uuid, String)> = query
             .select((refresh_tokens::id, refresh_tokens::token_hash))
             .load(&mut conn)
             .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
@@ -124,14 +117,14 @@ async fn handle_logout(
                     .execute(&mut conn)
                     .map_err(|e| LogoutError::DatabaseError(e.to_string()))?;
 
-                info!("Specific session logged out for user: {}", user_id);
+                info!("Specific session logged out");
                 break;
             }
         }
     }
 
     // Acknowledge logout regardless of cookie presence
-    info!("Access token logout for user: {}", user_id);
+    info!("Logout acknowledged");
     Ok(LogoutResponse {
         message: "Successfully logged out".to_string(),
     })

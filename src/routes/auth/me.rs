@@ -1,4 +1,5 @@
 use actix_web::{get, web::Data, HttpRequest, HttpResponse, Result};
+use chrono::Utc;
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use log::{error, info};
 use serde::Serialize;
@@ -6,7 +7,12 @@ use thiserror::Error;
 
 use crate::{
     config::AppConfig,
-    db::{model::User, schema::users, AppState},
+    db::{
+        model::{RefreshToken, User},
+        schema::{refresh_tokens, users},
+        AppState,
+    },
+    utils::password::PasswordService,
 };
 
 #[derive(Error, Debug)]
@@ -82,27 +88,59 @@ async fn handle_me(
     pool: &AppState,
     config: &AppConfig,
 ) -> Result<UserProfile, MeError> {
-    // Extract access token from Authorization header
-    let auth_header = req
+    // Try access token first
+    let auth_sub = req
         .headers()
         .get("Authorization")
         .and_then(|h| h.to_str().ok())
         .and_then(|h| h.strip_prefix("Bearer "))
-        .ok_or(MeError::MissingAuth)?;
-
-    // Verify access token
-    let token_data = config
-        .jwt
-        .verify_token(auth_header)
-        .map_err(|_| MeError::InvalidToken)?;
-
-    let user_id = &token_data.claims.sub;
+        .and_then(|t| config.jwt.verify_token(t).ok())
+        .map(|d| d.claims.sub);
 
     // Get database connection
     let mut conn = pool
         .db
         .get()
         .map_err(|e| MeError::DatabaseError(e.to_string()))?;
+
+    // Derive user_id from access token or a valid refresh cookie
+    let user_id = if let Some(sub) = auth_sub {
+        sub
+    } else {
+        // Fallback to refresh cookie
+        let token_value = req
+            .cookie("refresh_token")
+            .map(|c| c.value().to_string())
+            .ok_or(MeError::MissingAuth)?;
+
+        // Verify JWT structure
+        let token_data = config
+            .jwt
+            .verify_token(&token_value)
+            .map_err(|_| MeError::InvalidToken)?;
+
+        // Validate against DB (exists, not revoked, not expired)
+        let all_stored_tokens: Vec<RefreshToken> = refresh_tokens::table
+            .filter(refresh_tokens::user_id.eq(&token_data.claims.sub))
+            .select(RefreshToken::as_select())
+            .load(&mut conn)
+            .map_err(|e| MeError::DatabaseError(e.to_string()))?;
+
+        let mut matching: Option<RefreshToken> = None;
+        for t in all_stored_tokens {
+            if PasswordService::verify_password(&token_value, &t.token_hash).unwrap_or(false) {
+                matching = Some(t);
+                break;
+            }
+        }
+
+        let token = matching.ok_or(MeError::InvalidToken)?;
+        if token.revoked || token.expires_at <= Utc::now() {
+            return Err(MeError::InvalidToken);
+        }
+
+        token_data.claims.sub
+    };
 
     // Get user from database
     let user = users::table

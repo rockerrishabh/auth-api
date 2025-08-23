@@ -235,10 +235,11 @@ fn create_refresh_token_cookie(token_value: &str, config: &AppConfig) -> Cookie<
     let max_age = config.jwt.access_token_expires_in;
 
     Cookie::build("refresh_token", token_value.to_string())
+        .domain(config.jwt.domain.clone())
         .path("/")
         .max_age(actix_web::cookie::time::Duration::seconds(max_age))
         .http_only(true)
         .secure(true) // Only send over HTTPS
-        .same_site(actix_web::cookie::SameSite::Strict)
+        .same_site(actix_web::cookie::SameSite::Lax)
         .finish()
 }
