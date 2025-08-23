@@ -48,10 +48,13 @@ pub async fn logout_user(
 
             // Create cookies to clear the refresh token with exact matching attributes
             // Match the attributes used in create_refresh_token_cookie
+            // Use expires with past date instead of max_age(0) for better browser compatibility
+            let past_date = actix_web::cookie::time::OffsetDateTime::now_utc()
+                - actix_web::cookie::time::Duration::days(1);
             let clear_cookie_secure = Cookie::build("refresh_token", "")
                 .domain(config.jwt.domain.clone())
                 .path("/")
-                .max_age(actix_web::cookie::time::Duration::seconds(0))
+                .expires(past_date)
                 .http_only(true)
                 .secure(true)
                 .same_site(actix_web::cookie::SameSite::Lax)
