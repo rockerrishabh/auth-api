@@ -2,6 +2,7 @@ pub mod login;
 pub mod logout;
 pub mod me;
 pub mod password_reset;
+pub mod profile_update;
 pub mod refresh;
 pub mod register;
 pub mod verify;
