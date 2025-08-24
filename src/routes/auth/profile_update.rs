@@ -1,5 +1,5 @@
 use actix_multipart::Multipart;
-use actix_web::{put, web::Data, HttpRequest, HttpResponse, Result};
+use actix_web::{get, put, web, web::Data, HttpRequest, HttpResponse, Result};
 use chrono::Utc;
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
 use futures_util::{StreamExt, TryStreamExt};
@@ -93,6 +93,11 @@ pub struct UserProfile {
     pub email_verified: bool,
     pub created_at: String,
     pub updated_at: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct VerificationResponse {
+    pub message: String,
 }
 
 #[put("/profile")]
@@ -363,5 +368,88 @@ async fn handle_profile_update(
     Ok(ProfileUpdateResponse {
         message: "Profile updated successfully".to_string(),
         user: user_profile,
+    })
+}
+
+#[get("/verify-email-change")]
+pub async fn verify_email_change(
+    query: web::Query<std::collections::HashMap<String, String>>,
+    pool: Data<AppState>,
+    config: Data<AppConfig>,
+) -> Result<HttpResponse> {
+    let token = query.get("token").cloned().unwrap_or_default();
+
+    if token.is_empty() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "Missing token",
+            "message": "Verification token is required"
+        })));
+    }
+
+    info!("Email change verification attempt");
+
+    match handle_verify_email_change(token, &pool, &config).await {
+        Ok(response) => {
+            info!("Email change verification successful");
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(e) => {
+            error!("Email change verification failed: {}", e);
+            Ok(e.to_http_response())
+        }
+    }
+}
+
+async fn handle_verify_email_change(
+    token: String,
+    pool: &AppState,
+    config: &AppConfig,
+) -> Result<VerificationResponse, ProfileUpdateError> {
+    // Verify the JWT verification token
+    let token_data = config
+        .jwt
+        .verify_token(&token)
+        .map_err(|_| ProfileUpdateError::InvalidToken)?;
+
+    // Check if this is an email verification token
+    if token_data.claims.purpose != crate::config::TokenType::EmailVerification {
+        return Err(ProfileUpdateError::InvalidToken);
+    }
+
+    let user_id = &token_data.claims.sub;
+    let new_email = &token_data.claims.email;
+
+    // Get database connection
+    let mut conn = pool
+        .db
+        .get()
+        .map_err(|e| ProfileUpdateError::DatabaseError(e.to_string()))?;
+
+    // Get user from database
+    let user = users::table
+        .filter(users::id.eq(&user_id))
+        .select(User::as_select())
+        .first::<User>(&mut conn)
+        .optional()
+        .map_err(|e| ProfileUpdateError::DatabaseError(e.to_string()))?
+        .ok_or(ProfileUpdateError::UserNotFound)?;
+
+    // Update user's email and mark as verified
+    diesel::update(users::table.filter(users::id.eq(&user_id)))
+        .set((
+            users::email.eq(new_email),
+            users::email_verified.eq(true),
+            users::updated_at.eq(Utc::now()),
+        ))
+        .execute(&mut conn)
+        .map_err(|e| ProfileUpdateError::DatabaseError(e.to_string()))?;
+
+    info!(
+        "Email changed and verified for user {}: {} -> {}",
+        user_id, user.email, new_email
+    );
+
+    Ok(VerificationResponse {
+        message: "Email address changed and verified successfully".to_string(),
     })
 }
