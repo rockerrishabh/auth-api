@@ -1,6 +1,8 @@
+use actix_multipart::Multipart;
 use actix_web::{put, web::Data, HttpRequest, HttpResponse, Result};
 use chrono::Utc;
 use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SelectableHelper};
+use futures_util::{StreamExt, TryStreamExt};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -97,11 +99,69 @@ pub async fn update_profile(
     req: HttpRequest,
     pool: Data<AppState>,
     config: Data<AppConfig>,
-    form: actix_web::web::Form<ProfileUpdateRequest>,
+    mut payload: Multipart,
 ) -> Result<HttpResponse> {
     info!("Profile update request");
 
-    match handle_profile_update(req, &pool, &config, form.into_inner()).await {
+    let mut update_data = ProfileUpdateRequest {
+        name: None,
+        email: None,
+        avatar: None,
+        avatar_filename: None,
+    };
+
+    // Parse multipart form data
+    while let Ok(Some(mut field)) = payload.try_next().await {
+        let content_disposition = field.content_disposition();
+        if let Some(content_disposition) = content_disposition {
+            let field_name = content_disposition.get_name().unwrap_or("unknown");
+
+            match field_name {
+                "name" => {
+                    let mut value = String::new();
+                    while let Some(chunk_result) = field.next().await {
+                        if let Ok(chunk) = chunk_result {
+                            value.push_str(&String::from_utf8_lossy(&chunk));
+                        }
+                    }
+                    if !value.is_empty() {
+                        update_data.name = Some(value);
+                    }
+                }
+                "email" => {
+                    let mut value = String::new();
+                    while let Some(chunk_result) = field.next().await {
+                        if let Ok(chunk) = chunk_result {
+                            value.push_str(&String::from_utf8_lossy(&chunk));
+                        }
+                    }
+                    if !value.is_empty() {
+                        update_data.email = Some(value);
+                    }
+                }
+                "avatar" => {
+                    if let Some(filename) = content_disposition.get_filename() {
+                        update_data.avatar_filename = Some(filename.to_string());
+                        let mut data = Vec::new();
+                        while let Some(chunk_result) = field.next().await {
+                            if let Ok(chunk) = chunk_result {
+                                data.extend_from_slice(&chunk);
+                            }
+                        }
+                        if !data.is_empty() {
+                            update_data.avatar = Some(data);
+                        }
+                    }
+                }
+                _ => {
+                    // Skip unknown fields
+                    while let Some(_) = field.next().await {}
+                }
+            }
+        }
+    }
+
+    match handle_profile_update(req, &pool, &config, update_data).await {
         Ok(response) => {
             info!("Profile updated successfully");
             Ok(HttpResponse::Ok().json(response))
