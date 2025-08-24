@@ -12,7 +12,7 @@ use crate::{
         schema::{refresh_tokens, users},
         AppState,
     },
-    utils::password::PasswordService,
+    utils::{image_process, password::PasswordService},
 };
 
 #[derive(Error, Debug)]
@@ -27,6 +27,8 @@ pub enum ProfileUpdateError {
     DatabaseError(String),
     #[error("Validation error: {0}")]
     ValidationError(String),
+    #[error("Image processing error: {0}")]
+    ImageProcessingError(String),
 }
 
 impl ProfileUpdateError {
@@ -54,6 +56,11 @@ impl ProfileUpdateError {
                     "message": "An error occurred while processing your request"
                 }))
             }
+            ProfileUpdateError::ImageProcessingError(_) => HttpResponse::InternalServerError()
+                .json(serde_json::json!({
+                    "error": "Image processing error",
+                    "message": "Failed to process the uploaded image"
+                })),
         }
     }
 }
@@ -61,6 +68,9 @@ impl ProfileUpdateError {
 #[derive(Deserialize)]
 pub struct ProfileUpdateRequest {
     pub name: Option<String>,
+    pub email: Option<String>,
+    pub avatar: Option<Vec<u8>>,
+    pub avatar_filename: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -114,6 +124,14 @@ async fn handle_profile_update(
         if name.trim().is_empty() || name.len() > 100 {
             return Err(ProfileUpdateError::ValidationError(
                 "Name must be between 1 and 100 characters".to_string(),
+            ));
+        }
+    }
+
+    if let Some(email) = &update_data.email {
+        if email.trim().is_empty() || !email.contains('@') {
+            return Err(ProfileUpdateError::ValidationError(
+                "Invalid email address".to_string(),
             ));
         }
     }
@@ -181,10 +199,65 @@ async fn handle_profile_update(
         .map_err(|e| ProfileUpdateError::DatabaseError(e.to_string()))?
         .ok_or(ProfileUpdateError::UserNotFound)?;
 
+    // Process avatar if provided
+    let mut avatar_path = user.avatar;
+    let mut avatar_thumbnail_path = user.avatar_thumbnail;
+
+    if let (Some(avatar_data), Some(filename)) = (&update_data.avatar, &update_data.avatar_filename)
+    {
+        match image_process::image_process(avatar_data.clone(), filename.clone(), &config.upload)
+            .await
+        {
+            Ok(processed_image) => {
+                avatar_path = Some(format!("{}/{}", "static", processed_image.avif_name));
+                if let Some(thumb_name) = processed_image.thumbnail_name {
+                    avatar_thumbnail_path = Some(format!("{}/{}", "static", thumb_name));
+                }
+            }
+            Err(e) => {
+                return Err(ProfileUpdateError::ImageProcessingError(e.to_string()));
+            }
+        }
+    }
+
+    // Handle email change with verification
+    let mut new_email = user.email.clone();
+    let mut email_verified = user.email_verified;
+
+    if let Some(email) = &update_data.email {
+        if email != &user.email {
+            // Email is changing, require verification
+            new_email = email.clone();
+            email_verified = false;
+
+            // Generate verification token
+            let verification_token = config
+                .jwt
+                .generate_email_verification_token(user_id, email)
+                .map_err(|e| {
+                    ProfileUpdateError::DatabaseError(format!(
+                        "Failed to generate verification token: {}",
+                        e
+                    ))
+                })?;
+
+            // TODO: Send verification email here
+            // For now, we'll just log it
+            info!(
+                "Email verification token generated for {}: {}",
+                email, verification_token
+            );
+        }
+    }
+
     // Update user in database
     diesel::update(users::table.filter(users::id.eq(&user_id)))
         .set((
             users::name.eq(update_data.name.unwrap_or(user.name)),
+            users::email.eq(new_email),
+            users::email_verified.eq(email_verified),
+            users::avatar.eq(avatar_path),
+            users::avatar_thumbnail.eq(avatar_thumbnail_path),
             users::updated_at.eq(Utc::now()),
         ))
         .execute(&mut conn)
