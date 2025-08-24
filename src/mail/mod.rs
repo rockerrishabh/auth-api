@@ -187,10 +187,7 @@ impl EmailService {
         verification_token: &str,
         frontend_url: &str,
     ) -> Result<Response, EmailError> {
-        let verification_url = format!(
-            "{}/verify?token={}",
-            frontend_url, verification_token
-        );
+        let verification_url = format!("{}/verify?token={}", frontend_url, verification_token);
 
         let html_body = create_email_change_verification_html(name, new_email, &verification_url);
         let text_body = create_email_change_verification_text(name, new_email, &verification_url);
