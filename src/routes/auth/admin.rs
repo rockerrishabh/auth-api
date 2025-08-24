@@ -27,7 +27,6 @@ pub struct AdminError {
 // Make user admin (with secret)
 #[post("/make-admin")]
 pub async fn make_user_admin(
-    req: HttpRequest,
     data: web::Json<MakeAdminRequest>,
     pool: Data<AppState>,
     config: Data<AppConfig>,
