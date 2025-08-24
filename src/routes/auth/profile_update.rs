@@ -270,9 +270,10 @@ async fn handle_profile_update(
             .await
         {
             Ok(processed_image) => {
-                avatar_path = Some(format!("{}/{}", "static", processed_image.avif_name));
+                // Save the full path to the processed AVIF image
+                avatar_path = Some(format!("{}/{}", config.upload.upload_dir, processed_image.avif_name));
                 if let Some(thumb_name) = processed_image.thumbnail_name {
-                    avatar_thumbnail_path = Some(format!("{}/{}", "static", thumb_name));
+                    avatar_thumbnail_path = Some(format!("{}/{}", config.upload.upload_dir, thumb_name));
                 }
             }
             Err(e) => {
