@@ -164,6 +164,11 @@ async fn handle_verify_email(
         
         if is_email_change {
             // This is an email change verification
+            // Check if the new email is already verified for this user
+            if user.email_verified && user.email == token_data.claims.email {
+                return Err(VerificationError::AlreadyVerified);
+            }
+            
             // Update the user's email and mark as verified
             diesel::update(users::table.filter(users::id.eq(&user_id)))
                 .set((
