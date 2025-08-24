@@ -46,6 +46,7 @@ pub async fn make_user_admin(
 
     // Find the user by email
     let user = users::table
+        .select(User::as_select())
         .filter(users::email.eq(&data.user_email))
         .first::<User>(&mut conn)
         .map_err(|e| actix_web::error::ErrorNotFound(format!("User not found: {}", e)))?;
@@ -54,7 +55,7 @@ pub async fn make_user_admin(
     let updated_user = diesel::update(users::table)
         .filter(users::id.eq(user.id))
         .set(users::role.eq(UserRole::Admin))
-        .returning(User::as_returning())
+        .returning(User::as_select())
         .get_result::<User>(&mut conn)
         .map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to update user: {}", e))
@@ -64,25 +65,4 @@ pub async fn make_user_admin(
         message: "User role updated to admin successfully".to_string(),
         user: updated_user,
     }))
-}
-
-// Helper function to verify admin token
-fn verify_admin_token(req: &HttpRequest, config: &AppConfig) -> Result<uuid::Uuid> {
-    let auth_header = req
-        .headers()
-        .get("Authorization")
-        .and_then(|h| h.to_str().ok())
-        .and_then(|h| h.strip_prefix("Bearer "))
-        .ok_or(actix_web::error::ErrorUnauthorized(
-            "Missing authorization header",
-        ))?;
-
-    let token_data = config
-        .jwt
-        .verify_token(auth_header)
-        .map_err(|_| actix_web::error::ErrorUnauthorized("Invalid token"))?;
-
-    let user_id = token_data.claims.sub;
-
-    Ok(user_id)
 }
