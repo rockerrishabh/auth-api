@@ -14,6 +14,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(auth::verify::verify_email)
             .service(auth::verify::resend_verification)
             .service(auth::password_reset::request_password_reset)
-            .service(auth::password_reset::reset_password),
+            .service(auth::password_reset::reset_password)
+            .service(auth::password_change::change_password),
     );
 }
