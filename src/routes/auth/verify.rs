@@ -154,7 +154,7 @@ async fn handle_verify_email(
         .get()
         .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
 
-    // Check if user exists and is not already verified
+    // Check if user exists
     let user = users::table
         .filter(users::id.eq(&user_id))
         .select(User::as_select())
@@ -163,6 +163,42 @@ async fn handle_verify_email(
         .map_err(|e| VerificationError::DatabaseError(e.to_string()))?
         .ok_or(VerificationError::UserNotFound)?;
 
+    // Check if this is an email change verification
+    let is_email_change = token_data.claims.email != user.email;
+    
+    if is_email_change {
+        // This is an email change verification
+        // Update the user's email and mark as verified
+        diesel::update(users::table.filter(users::id.eq(&user_id)))
+            .set((
+                users::email.eq(&token_data.claims.email),
+                users::email_verified.eq(true),
+            ))
+            .execute(&mut conn)
+            .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+        info!("Email changed and verified for user {}: {} -> {}", 
+            user_id, user.email, token_data.claims.email);
+
+        // Get the updated user to send confirmation email
+        let updated_user = users::table
+            .filter(users::id.eq(&user_id))
+            .select(User::as_select())
+            .first::<User>(&mut conn)
+            .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+        // Send verification confirmation email to the new email
+        if let Err(e) = email_service.send_verification_confirmation_email(&updated_user) {
+            // Log the error but don't fail the verification
+            error!("Failed to send verification confirmation email: {}", e);
+        }
+
+        return Ok(VerificationResponse {
+            message: "Email address changed and verified successfully".to_string(),
+        });
+    }
+
+    // This is a regular email verification (not email change)
     if user.email_verified {
         return Err(VerificationError::AlreadyVerified);
     }

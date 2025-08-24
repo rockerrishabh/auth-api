@@ -188,7 +188,7 @@ impl EmailService {
         frontend_url: &str,
     ) -> Result<Response, EmailError> {
         let verification_url = format!(
-            "{}/verify-email-change?token={}",
+            "{}/verify?token={}",
             frontend_url, verification_token
         );
 
