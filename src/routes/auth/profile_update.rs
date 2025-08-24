@@ -14,6 +14,7 @@ use crate::{
         schema::{refresh_tokens, users},
         AppState,
     },
+    mail::EmailService,
     utils::{image_process, password::PasswordService},
 };
 
@@ -301,12 +302,29 @@ async fn handle_profile_update(
                     ))
                 })?;
 
-            // TODO: Send verification email here
-            // For now, we'll just log it
-            info!(
-                "Email verification token generated for {}: {}",
-                email, verification_token
-            );
+            // Send verification email
+            let email_service = EmailService::new(config.email.clone()).map_err(|e| {
+                ProfileUpdateError::DatabaseError(format!("Failed to create email service: {}", e))
+            })?;
+
+            match email_service.send_email_change_verification_email(
+                &user.name,
+                email,
+                &verification_token,
+                &config.server.frontend_url,
+            ) {
+                Ok(_) => {
+                    info!(
+                        "Email change verification email sent successfully to {}",
+                        email
+                    );
+                }
+                Err(e) => {
+                    error!("Failed to send email change verification email: {}", e);
+                    // Don't fail the profile update, just log the error
+                    // The user can request a resend later
+                }
+            }
         }
     }
 

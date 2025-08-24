@@ -10,6 +10,9 @@ use crate::{
     config::EmailConfig,
     db::model::User,
     mail::templates::{
+        email_change_verification::{
+            create_email_change_verification_html, create_email_change_verification_text,
+        },
         password_change_confirmation::{
             create_password_change_confirmation_html, create_password_change_confirmation_text,
         },
@@ -170,6 +173,29 @@ impl EmailService {
             to_name: user.name.clone(),
             to_email: user.email.clone(),
             subject: "Email Verified Successfully!".to_string(),
+            html_body,
+            text_body: Some(text_body),
+        };
+
+        self.send_message(email_message)
+    }
+
+    pub fn send_email_change_verification_email(
+        &self,
+        name: &str,
+        new_email: &str,
+        verification_token: &str,
+        frontend_url: &str,
+    ) -> Result<Response, EmailError> {
+        let verification_url = format!("{}/verify?token={}", frontend_url, verification_token);
+
+        let html_body = create_email_change_verification_html(name, new_email, &verification_url);
+        let text_body = create_email_change_verification_text(name, new_email, &verification_url);
+
+        let email_message = EmailMessage {
+            to_name: name.to_string(),
+            to_email: new_email.to_string(),
+            subject: "Verify Your New Email Address".to_string(),
             html_body,
             text_body: Some(text_body),
         };
