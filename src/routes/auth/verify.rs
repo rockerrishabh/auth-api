@@ -135,91 +135,137 @@ async fn handle_verify_email(
     config: &AppConfig,
     email_service: &EmailService,
 ) -> Result<VerificationResponse, VerificationError> {
-    // Verify the JWT verification token
-    let token_data = config
-        .jwt
-        .verify_token(&token)
-        .map_err(|_| VerificationError::InvalidToken)?;
+    // First, try to verify as a JWT token (for email changes)
+    if let Ok(token_data) = config.jwt.verify_token(&token) {
+        // Check if this is an email verification token
+        if token_data.claims.purpose != crate::config::TokenType::EmailVerification {
+            return Err(VerificationError::InvalidToken);
+        }
 
-    // Check if this is an email verification token
-    if token_data.claims.purpose != crate::config::TokenType::EmailVerification {
-        return Err(VerificationError::InvalidToken);
+        let user_id = &token_data.claims.sub;
+
+        // Get database connection
+        let mut conn = pool
+            .db
+            .get()
+            .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+        // Check if user exists
+        let user = users::table
+            .filter(users::id.eq(&user_id))
+            .select(User::as_select())
+            .first::<User>(&mut conn)
+            .optional()
+            .map_err(|e| VerificationError::DatabaseError(e.to_string()))?
+            .ok_or(VerificationError::UserNotFound)?;
+
+        // Check if this is an email change verification
+        let is_email_change = token_data.claims.email != user.email;
+        
+        if is_email_change {
+            // This is an email change verification
+            // Update the user's email and mark as verified
+            diesel::update(users::table.filter(users::id.eq(&user_id)))
+                .set((
+                    users::email.eq(&token_data.claims.email),
+                    users::email_verified.eq(true),
+                ))
+                .execute(&mut conn)
+                .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+            info!("Email changed and verified for user {}: {} -> {}", 
+                user_id, user.email, token_data.claims.email);
+
+            // Get the updated user to send confirmation email
+            let updated_user = users::table
+                .filter(users::id.eq(&user_id))
+                .select(User::as_select())
+                .first::<User>(&mut conn)
+                .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+            // Send verification confirmation email to the new email
+            if let Err(e) = email_service.send_verification_confirmation_email(&updated_user) {
+                // Log the error but don't fail the verification
+                error!("Failed to send verification confirmation email: {}", e);
+            }
+
+            return Ok(VerificationResponse {
+                message: "Email address changed and verified successfully".to_string(),
+            });
+        } else {
+            // This is a regular JWT verification (not email change)
+            if user.email_verified {
+                return Err(VerificationError::AlreadyVerified);
+            }
+
+            // Mark user as verified
+            diesel::update(users::table.filter(users::id.eq(&user_id)))
+                .set(users::email_verified.eq(true))
+                .execute(&mut conn)
+                .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+            // Get the updated user to send confirmation email
+            let updated_user = users::table
+                .filter(users::id.eq(&user_id))
+                .select(User::as_select())
+                .first::<User>(&mut conn)
+                .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+            // Send verification confirmation email
+            if let Err(e) = email_service.send_verification_confirmation_email(&updated_user) {
+                // Log the error but don't fail the verification
+                error!("Failed to send verification confirmation email: {}", e);
+            }
+
+            return Ok(VerificationResponse {
+                message: "Email verified successfully".to_string(),
+            });
+        }
     }
 
-    let user_id = &token_data.claims.sub;
-
-    // Get database connection
+    // If JWT verification failed, try database hash-based verification (for initial registration)
     let mut conn = pool
         .db
         .get()
         .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
 
-    // Check if user exists
-    let user = users::table
-        .filter(users::id.eq(&user_id))
+    // Find verification tokens for this user by trying to match against all users
+    let all_users = users::table
         .select(User::as_select())
-        .first::<User>(&mut conn)
-        .optional()
-        .map_err(|e| VerificationError::DatabaseError(e.to_string()))?
-        .ok_or(VerificationError::UserNotFound)?;
-
-    // Check if this is an email change verification
-    let is_email_change = token_data.claims.email != user.email;
-    
-    if is_email_change {
-        // This is an email change verification
-        // Update the user's email and mark as verified
-        diesel::update(users::table.filter(users::id.eq(&user_id)))
-            .set((
-                users::email.eq(&token_data.claims.email),
-                users::email_verified.eq(true),
-            ))
-            .execute(&mut conn)
-            .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
-
-        info!("Email changed and verified for user {}: {} -> {}", 
-            user_id, user.email, token_data.claims.email);
-
-        // Get the updated user to send confirmation email
-        let updated_user = users::table
-            .filter(users::id.eq(&user_id))
-            .select(User::as_select())
-            .first::<User>(&mut conn)
-            .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
-
-        // Send verification confirmation email to the new email
-        if let Err(e) = email_service.send_verification_confirmation_email(&updated_user) {
-            // Log the error but don't fail the verification
-            error!("Failed to send verification confirmation email: {}", e);
-        }
-
-        return Ok(VerificationResponse {
-            message: "Email address changed and verified successfully".to_string(),
-        });
-    }
-
-    // This is a regular email verification (not email change)
-    if user.email_verified {
-        return Err(VerificationError::AlreadyVerified);
-    }
-
-    // Find verification tokens for this user
-    let stored_tokens: Vec<EmailVerificationToken> = email_verification_tokens::table
-        .filter(email_verification_tokens::user_id.eq(&user_id))
-        .select(EmailVerificationToken::as_select())
-        .load(&mut conn)
+        .load::<User>(&mut conn)
         .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
 
-    // Find a matching token by checking if any stored hash matches the current token
-    let mut matching_token: Option<&EmailVerificationToken> = None;
-    for stored_token in &stored_tokens {
-        if PasswordService::verify_password(&token, &stored_token.token_hash).unwrap_or(false) {
-            matching_token = Some(stored_token);
+    let mut matching_user: Option<User> = None;
+    let mut matching_token: Option<EmailVerificationToken> = None;
+
+    for user in &all_users {
+        let stored_tokens: Vec<EmailVerificationToken> = email_verification_tokens::table
+            .filter(email_verification_tokens::user_id.eq(&user.id))
+            .select(EmailVerificationToken::as_select())
+            .load(&mut conn)
+            .map_err(|e| VerificationError::DatabaseError(e.to_string()))?;
+
+        for stored_token in &stored_tokens {
+            if PasswordService::verify_password(&token, &stored_token.token_hash).unwrap_or(false) {
+                matching_user = Some((*user).clone());
+                matching_token = Some(stored_token.clone());
+                break;
+            }
+        }
+        if matching_token.is_some() {
             break;
         }
     }
 
-    let verification_token = matching_token.ok_or(VerificationError::InvalidToken)?;
+    let (user, verification_token) = match (matching_user, matching_token) {
+        (Some(u), Some(t)) => (u, t),
+        _ => return Err(VerificationError::InvalidToken),
+    };
+
+    // Check if user is already verified
+    if user.email_verified {
+        return Err(VerificationError::AlreadyVerified);
+    }
 
     // Check if token is already used
     if verification_token.used {
@@ -232,6 +278,7 @@ async fn handle_verify_email(
     }
 
     let token_id = verification_token.id;
+    let user_id = user.id;
 
     // Mark user as verified
     diesel::update(users::table.filter(users::id.eq(&user_id)))

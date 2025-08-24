@@ -14,7 +14,7 @@ pub enum UserRole {
     User,
 }
 
-#[derive(Queryable, Debug, Selectable, Serialize, Deserialize)]
+#[derive(Queryable, Debug, Selectable, Serialize, Deserialize, Clone)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct User {
@@ -83,7 +83,7 @@ pub struct NewPasswordResetToken<'a> {
 }
 
 // Email Verification Token Model
-#[derive(Queryable, Debug, Selectable, Serialize, Deserialize)]
+#[derive(Queryable, Debug, Selectable, Serialize, Deserialize, Clone)]
 #[diesel(table_name = email_verification_tokens)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct EmailVerificationToken {
