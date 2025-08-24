@@ -1,8 +1,7 @@
 use crate::config::AppConfig;
 use crate::db::model::UserRole;
 use crate::db::{model::User, schema::users, AppState};
-use actix_web::{post, web, web::Data, HttpRequest, HttpResponse, Result};
-use chrono::Utc;
+use actix_web::{post, web, web::Data, HttpResponse, Result};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
