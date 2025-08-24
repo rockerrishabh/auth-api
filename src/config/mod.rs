@@ -11,6 +11,7 @@ pub struct AppConfig {
     pub jwt: JwtConfig,
     pub upload: UploadConfig,
     pub server: ServerConfig,
+    pub admin: AdminConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -60,6 +61,11 @@ pub struct UploadConfig {
     pub allowed_types: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct AdminConfig {
+    pub secret: String,
+}
+
 impl AppConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
         Ok(AppConfig {
@@ -68,6 +74,7 @@ impl AppConfig {
             jwt: JwtConfig::from_env()?,
             upload: UploadConfig::from_env()?,
             server: ServerConfig::from_env()?,
+            admin: AdminConfig::from_env()?,
         })
     }
 }
@@ -95,6 +102,14 @@ impl ServerConfig {
                 .parse()
                 .map_err(|_| ConfigError::InvalidFormat("PORT must be a valid number".into()))?,
             host: get_env_var_or_default("HOST", "0.0.0.0"),
+        })
+    }
+}
+
+impl AdminConfig {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        Ok(AdminConfig {
+            secret: get_env_var_or_default("ADMIN_SECRET", "admin-secret-key-change-in-production"),
         })
     }
 }
