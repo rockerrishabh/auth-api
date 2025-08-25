@@ -9,6 +9,7 @@ use crate::db::schema::{email_verification_tokens, password_reset_tokens, refres
 
 #[derive(diesel_derive_enum::DbEnum, Debug, Clone, Serialize, Deserialize)]
 #[db_enum(existing_type_path = "crate::db::schema::sql_types::UserRole")]
+#[serde(rename_all = "lowercase")]
 pub enum UserRole {
     Admin,
     User,
