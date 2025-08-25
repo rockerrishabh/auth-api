@@ -19,6 +19,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(
                 web::scope("/admin")
                     .service(auth::admin::make_user_admin)
+                    .service(auth::admin::get_admin_stats)
+                    .service(auth::admin::get_all_users)
+                    .service(auth::admin::update_user)
+                    .service(auth::admin::delete_user)
             ),
     );
 }
