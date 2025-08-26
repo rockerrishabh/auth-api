@@ -3,6 +3,10 @@ on:
   push:
     branches:
       - main
+
+# This workflow deploys the Rust authentication API
+# IMPORTANT: The templates directory is required for email functionality
+# and must be included in the deployment for the application to work properly
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -51,8 +55,31 @@ jobs:
           else
             echo "No static directory found"
           fi
+          # Copy templates directory (required for email functionality)
+          if [ -d "templates" ]; then
+            cp -r templates artifact/
+            echo "Templates directory copied"
+          else
+            echo "No templates directory found"
+            exit 1
+          fi
+          # Verify all required files are present
+          echo "Verifying deployment contents..."
+          if [ ! -f "artifact/auth-api" ]; then
+            echo "ERROR: Binary not found in artifact!"
+            exit 1
+          fi
+          if [ ! -d "artifact/templates" ]; then
+            echo "ERROR: Templates directory not found in artifact!"
+            exit 1
+          fi
+          echo "All required files verified successfully"
+
           # List what we're deploying
+          echo "Deployment contents:"
           ls -la artifact/
+          echo "Templates directory contents:"
+          ls -la artifact/templates/ 2>/dev/null || echo "No templates found"
 
       - name: Setup SSH key
         run: |
@@ -82,6 +109,16 @@ jobs:
             ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "ls -la ${{ secrets.DEPLOY_PATH }}/static/"
           else
             echo "No static files to copy"
+          fi
+
+          # Copy templates directory (required for email functionality)
+          if [ -d "artifact/templates" ]; then
+            echo "Copying templates directory..."
+            scp -i ~/.ssh/id_rsa -r artifact/templates ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/
+            ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "ls -la ${{ secrets.DEPLOY_PATH }}/templates/"
+          else
+            echo "No templates directory to copy"
+            exit 1
           fi
 
           # Make executable and verify

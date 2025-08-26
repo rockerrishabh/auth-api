@@ -5,7 +5,6 @@ use lettre::{
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
 use tera::{Context, Tera};
 
 use crate::{
@@ -35,62 +34,6 @@ pub struct EmailService {
 }
 
 impl EmailService {
-    /// Get the templates directory path, trying multiple strategies
-    fn get_template_dir() -> AuthResult<PathBuf> {
-        // Strategy 1: Try relative to current executable
-        if let Ok(exe_path) = std::env::current_exe() {
-            if let Some(exe_dir) = exe_path.parent() {
-                let template_dir = exe_dir.join("templates");
-                if template_dir.exists() {
-                    return Ok(template_dir);
-                }
-                // Try going up one level (for cases where exe is in target/debug/)
-                let template_dir = exe_dir
-                    .parent()
-                    .and_then(|parent| parent.parent())
-                    .map(|root| root.join("templates"))
-                    .filter(|path| path.exists());
-                if let Some(dir) = template_dir {
-                    return Ok(dir);
-                }
-            }
-        }
-
-        // Strategy 2: Try relative to current working directory
-        let cwd_template_dir = PathBuf::from("templates");
-        if cwd_template_dir.exists() {
-            return Ok(cwd_template_dir);
-        }
-
-        // Strategy 3: Try using CARGO_MANIFEST_DIR if available (development)
-        if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-            let template_dir = PathBuf::from(manifest_dir).join("templates");
-            if template_dir.exists() {
-                return Ok(template_dir);
-            }
-        }
-
-        // Strategy 4: Try common locations
-        let common_locations = [
-            "/app/templates",             // Docker containers
-            "/usr/local/share/templates", // System installations
-            "./templates",                // Current directory
-            "../templates",               // Parent directory
-        ];
-
-        for location in &common_locations {
-            let template_dir = PathBuf::from(location);
-            if template_dir.exists() {
-                return Ok(template_dir);
-            }
-        }
-
-        Err(AuthError::InternalError(
-            "Could not find templates directory. Please ensure templates are available."
-                .to_string(),
-        ))
-    }
-
     pub fn new(config: EmailConfig) -> AuthResult<Self> {
         let transport = if config.smtp_port == 587 {
             let builder = SmtpTransport::starttls_relay(&config.smtp_host)
@@ -118,71 +61,46 @@ impl EmailService {
 
         let mut tera = Tera::default();
 
-        // Get the template directory path
-        let template_dir = Self::get_template_dir()?;
-
-        // Load HTML templates using absolute paths
-        let email_verification_path = template_dir.join("email_verification.html");
+        // Load HTML templates
         tera.add_raw_template(
             "email_verification_otp",
-            &fs::read_to_string(&email_verification_path).map_err(|e| {
+            &fs::read_to_string("templates/email_verification.html").map_err(|e| {
                 AuthError::InternalError(format!(
-                    "Failed to load email verification template from {}: {}",
-                    email_verification_path.display(),
+                    "Failed to load email verification template: {}",
                     e
                 ))
             })?,
         )
         .map_err(|e| AuthError::InternalError(format!("Template engine error: {}", e)))?;
 
-        let welcome_email_path = template_dir.join("welcome_email.html");
         tera.add_raw_template(
             "welcome_email",
-            &fs::read_to_string(&welcome_email_path).map_err(|e| {
-                AuthError::InternalError(format!(
-                    "Failed to load welcome email template from {}: {}",
-                    welcome_email_path.display(),
-                    e
-                ))
+            &fs::read_to_string("templates/welcome_email.html").map_err(|e| {
+                AuthError::InternalError(format!("Failed to load welcome email template: {}", e))
             })?,
         )
         .map_err(|e| AuthError::InternalError(format!("Template engine error: {}", e)))?;
 
-        let password_reset_path = template_dir.join("password_reset_email.html");
         tera.add_raw_template(
             "password_reset_email",
-            &fs::read_to_string(&password_reset_path).map_err(|e| {
-                AuthError::InternalError(format!(
-                    "Failed to load password reset template from {}: {}",
-                    password_reset_path.display(),
-                    e
-                ))
+            &fs::read_to_string("templates/password_reset_email.html").map_err(|e| {
+                AuthError::InternalError(format!("Failed to load password reset template: {}", e))
             })?,
         )
         .map_err(|e| AuthError::InternalError(format!("Template engine error: {}", e)))?;
 
-        let security_alert_path = template_dir.join("security_alert.html");
         tera.add_raw_template(
             "security_alert_email",
-            &fs::read_to_string(&security_alert_path).map_err(|e| {
-                AuthError::InternalError(format!(
-                    "Failed to load security alert template from {}: {}",
-                    security_alert_path.display(),
-                    e
-                ))
+            &fs::read_to_string("templates/security_alert.html").map_err(|e| {
+                AuthError::InternalError(format!("Failed to load security alert template: {}", e))
             })?,
         )
         .map_err(|e| AuthError::InternalError(format!("Template engine error: {}", e)))?;
 
-        let two_factor_path = template_dir.join("two_factor_otp.html");
         tera.add_raw_template(
             "two_factor_otp",
-            &fs::read_to_string(&two_factor_path).map_err(|e| {
-                AuthError::InternalError(format!(
-                    "Failed to load two-factor OTP template from {}: {}",
-                    two_factor_path.display(),
-                    e
-                ))
+            &fs::read_to_string("templates/two_factor_otp.html").map_err(|e| {
+                AuthError::InternalError(format!("Failed to load two-factor OTP template: {}", e))
             })?,
         )
         .map_err(|e| AuthError::InternalError(format!("Template engine error: {}", e)))?;
