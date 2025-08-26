@@ -66,7 +66,10 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn new() -> Result<Self, ConfigError> {
-        let env = env::var("ENVIRONMENT").unwrap_or_else(|_| "development".into());
+        // First, try to get environment from APP_ENVIRONMENT or fallback to ENVIRONMENT
+        let env = env::var("APP_ENVIRONMENT")
+            .or_else(|_| env::var("ENVIRONMENT"))
+            .unwrap_or_else(|_| "development".into());
 
         let config = Config::builder()
             // Only load config files if they exist, otherwise rely on environment variables
