@@ -66,16 +66,8 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn new() -> Result<Self, ConfigError> {
-        // First, try to get environment from APP_ENVIRONMENT or fallback to ENVIRONMENT
-        let env = env::var("APP_ENVIRONMENT")
-            .or_else(|_| env::var("ENVIRONMENT"))
-            .unwrap_or_else(|_| "development".into());
-
+        // Only load from environment variables - no config files
         let config = Config::builder()
-            // Only load config files if they exist, otherwise rely on environment variables
-            .add_source(File::with_name("config/default.toml").required(false))
-            .add_source(File::with_name(&format!("config/{}.toml", env)).required(false))
-            .add_source(File::with_name("config/local.toml").required(false))
             .add_source(Environment::with_prefix("APP"))
             .build()?;
 
