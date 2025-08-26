@@ -1,28 +1,33 @@
+use crate::config::AppConfig;
+use crate::db::DbPool;
+use crate::middleware::AuthMiddleware;
 use actix_web::web;
 
-mod auth;
+pub mod admin;
+pub mod auth;
+pub mod health;
 
-pub fn config(cfg: &mut web::ServiceConfig) {
+
+
+pub fn configure_routes_simple(cfg: &mut web::ServiceConfig, config: AppConfig, db_pool: DbPool) {
     cfg.service(
-        web::scope("/auth")
-            .service(auth::login::login_user)
-            .service(auth::register::register_user)
-            .service(auth::me::get_user_profile)
-            .service(auth::profile_update::update_profile)
-            .service(auth::logout::logout_user)
-            .service(auth::refresh::refresh_user_token)
-            .service(auth::verify::verify_email)
-            .service(auth::verify::resend_verification)
-            .service(auth::password_reset::request_password_reset)
-            .service(auth::password_reset::reset_password)
-            .service(auth::password_change::change_password)
+        web::scope("/api/v1")
+            .configure(|cfg| {
+                // Create auth middleware for auth routes
+                let auth_middleware = AuthMiddleware::new(config.clone())
+                    .expect("Failed to create auth middleware for auth routes");
+                auth::configure_auth_routes(cfg, auth_middleware);
+            })
+            .configure(|cfg| {
+                // Create auth middleware for admin routes
+                let auth_middleware = AuthMiddleware::new(config.clone())
+                    .expect("Failed to create auth middleware for admin routes");
+                admin::configure_admin_routes(cfg, auth_middleware, db_pool, config.clone());
+            })
             .service(
-                web::scope("/admin")
-                    .service(auth::admin::make_user_admin)
-                    .service(auth::admin::get_admin_stats)
-                    .service(auth::admin::get_all_users)
-                    .service(auth::admin::update_user)
-                    .service(auth::admin::delete_user)
+                web::scope("")
+                    .service(health::health_check)
+                    .service(health::detailed_health_check),
             ),
     );
 }

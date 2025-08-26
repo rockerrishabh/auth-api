@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Security Alert</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #f44336; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background-color: #f9f9f9; }
+        .alert { background-color: #ffebee; border: 1px solid #f44336; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .actions { background-color: #fff3e0; border: 1px solid #ff9800; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .button { display: inline-block; background-color: #f44336; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+        .footer { background-color: #333; color: white; padding: 20px; text-align: center; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚨 Security Alert</h1>
+        </div>
+        <div class="content">
+            <h2>Hello {{ name }}!</h2>
+
+            <div class="alert">
+                <h3>⚠️ {{ alert_type }}</h3>
+                <p><strong>Time:</strong> {{ timestamp }}</p>
+                <p><strong>Details:</strong></p>
+                <p>{{ details }}</p>
+            </div>
+
+            <div class="actions">
+                <h4>Recommended Actions:</h4>
+                <ul>
+                    <li>If this was you: No action needed</li>
+                    <li>If this wasn't you: Change your password immediately</li>
+                    <li>Review your recent account activity</li>
+                    <li>Enable two-factor authentication if not already enabled</li>
+                    <li>Contact support if you have concerns</li>
+                </ul>
+
+                <a href="#" class="button">Change Password</a>
+                <a href="#" class="button">View Account Activity</a>
+            </div>
+
+            <p><strong>Stay Secure:</strong></p>
+            <ul>
+                <li>Use strong, unique passwords</li>
+                <li>Enable two-factor authentication</li>
+                <li>Monitor your account regularly</li>
+                <li>Never share your login credentials</li>
+            </ul>
+
+            <p>If you have any questions or concerns, please contact our security team immediately.</p>
+            <p>Best regards,<br>The Security Team</p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2024 Our Platform. All rights reserved.</p>
+            <p>This is an automated security notification.</p>
+        </div>
+    </div>
+</body>
+</html>
