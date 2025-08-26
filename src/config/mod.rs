@@ -1,6 +1,5 @@
 use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
-use std::env;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct DatabaseConfig {
