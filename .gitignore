@@ -1,3 +1,20 @@
 /target
 .env
 diesel.toml
+
+# Local configuration (contains sensitive data)
+config/local.toml
+
+# Static files
+static/
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

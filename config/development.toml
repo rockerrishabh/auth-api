@@ -1,0 +1,32 @@
+# Development Environment Configuration
+# This file contains development-specific overrides
+
+# Development settings
+environment = "development"
+host = "127.0.0.1"
+port = 5000
+
+# Development database (can be overridden by environment variables)
+[database]
+url = "postgresql://postgres:password@localhost:5432/auth_db"
+max_connections = 5
+min_connections = 1
+
+# Development email (use a local SMTP server or test service)
+[email]
+smtp_host = "localhost"
+smtp_port = 1025
+smtp_username = "test@example.com"
+smtp_password = "test-password"
+from_email = "noreply@dev.yourapp.com"
+from_name = "Your App (Dev)"
+
+# More lenient security for development
+[security]
+max_failed_attempts = 10
+lockout_duration = 60          # 1 minute for testing
+
+# Development upload settings
+[upload]
+dir = "./static"
+max_size = 52428800            # 50MB for development

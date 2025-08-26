@@ -69,7 +69,8 @@ impl AppConfig {
         let env = env::var("ENVIRONMENT").unwrap_or_else(|_| "development".into());
 
         let config = Config::builder()
-            .add_source(File::with_name("config/default.toml"))
+            // Only load config files if they exist, otherwise rely on environment variables
+            .add_source(File::with_name("config/default.toml").required(false))
             .add_source(File::with_name(&format!("config/{}.toml", env)).required(false))
             .add_source(File::with_name("config/local.toml").required(false))
             .add_source(Environment::with_prefix("APP"))

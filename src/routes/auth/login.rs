@@ -15,6 +15,14 @@ pub struct SecureLoginResponse {
     pub expires_in: u64,
 }
 
+#[derive(Debug, Serialize)]
+pub struct TwoFactorRequiredResponse {
+    pub message: String,
+    pub user: crate::db::models::UserResponse,
+    pub two_factor_required: bool,
+    pub otp_sent: bool,
+}
+
 #[post("/login")]
 pub async fn login_user(
     pool: web::Data<DbPool>,
@@ -41,9 +49,20 @@ pub async fn login_user(
 
     let response = auth_service.login(req.into_inner(), &http_req).await?;
 
-    // Session creation and activity logging are now handled by the auth service
+    // Check if 2FA is required (indicated by empty access token)
+    if response.access_token.is_empty() {
+        // 2FA is required, return 2FA response
+        let two_factor_response = TwoFactorRequiredResponse {
+            message: response.message,
+            user: response.user,
+            two_factor_required: true,
+            otp_sent: true,
+        };
 
-    // Create secure HTTP-only cookie for refresh token
+        return Ok(HttpResponse::Ok().json(two_factor_response));
+    }
+
+    // Normal login successful, create secure HTTP-only cookie for refresh token
     let refresh_token_cookie =
         actix_web::cookie::Cookie::build("refresh_token", response.session_token)
             .http_only(true)
@@ -54,7 +73,7 @@ pub async fn login_user(
             .finish();
 
     let secure_response = SecureLoginResponse {
-        message: "Login successful".to_string(),
+        message: response.message,
         user: response.user,
         access_token: response.access_token,
         expires_in: response.expires_in,

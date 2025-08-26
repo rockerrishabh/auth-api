@@ -1,0 +1,53 @@
+# Auth API Default Configuration
+# This file contains the base configuration for the authentication API.
+# Environment variables with APP_ prefix will override these values.
+
+# Application Settings
+host = "0.0.0.0"
+port = 5000
+environment = "development"
+frontend_url = "http://localhost:3000"
+
+# Database Configuration
+[database]
+url = "postgresql://username:password@localhost:5432/auth_db"
+max_connections = 10
+min_connections = 2
+connect_timeout = 10
+idle_timeout = 300
+max_lifetime = 3600
+
+# JWT Configuration
+[jwt]
+secret = "your-super-secret-jwt-key-here-make-it-long-and-random-at-least-32-characters"
+access_token_expiry = 3600      # 1 hour in seconds
+refresh_token_expiry = 2592000   # 30 days in seconds
+
+# Email Configuration
+[email]
+smtp_host = "smtp.gmail.com"
+smtp_port = 587
+smtp_username = "your-email@gmail.com"
+smtp_password = "your-app-password"
+from_email = "noreply@yourapp.com"
+from_name = "Your App Name"
+
+# Security Configuration
+[security]
+argon2_memory_cost = 65536      # 64MB
+argon2_time_cost = 3
+argon2_parallelism = 1
+session_timeout = 3600          # 1 hour in seconds
+max_failed_attempts = 5         # Max login attempts before lockout
+lockout_duration = 900          # 15 minutes lockout in seconds
+
+# File Upload Configuration
+[upload]
+dir = "./static"
+max_size = 10485760             # 10MB in bytes
+image_max_width = 1920
+image_max_height = 1080
+image_quality = 75
+generate_thumbnails = true
+thumbnail_size = 300
+allowed_types = ["jpg", "jpeg", "png", "gif", "webp"]

@@ -51,6 +51,14 @@ pub struct LoginResponse {
     pub session_token: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TwoFactorRequiredResponse {
+    pub message: String,
+    pub user: UserResponse,
+    pub two_factor_required: bool,
+    pub otp_sent: bool,
+}
+
 pub struct AuthService {
     db_pool: DbPool,
     jwt_service: JwtService,
@@ -219,7 +227,82 @@ impl AuthService {
             return Err(AuthError::InvalidCredentials);
         }
 
-        // Reset failed login attempts on successful login
+        // Check if user has 2FA enabled
+        if user.two_factor_enabled {
+            // Extract request information for the email
+            let ip_address = extract_ip_address(http_req);
+            let user_agent = extract_user_agent(http_req);
+            let login_time = chrono::Utc::now()
+                .format("%Y-%m-%d %H:%M:%S UTC")
+                .to_string();
+
+            // Create and store OTP in database
+            let otp_request = crate::services::otp::OtpRequest {
+                user_id: user.id,
+                otp_type: crate::db::models::OtpType::TwoFactor,
+                email: Some(user.email.clone()),
+                phone: None,
+            };
+
+            let otp_service = crate::services::otp::OtpService::new(
+                self.config.security.clone(),
+                self.db_pool.clone(),
+            );
+            let otp_data = otp_service.store_otp(&otp_request).await?;
+            let otp_code = otp_data.code.clone();
+
+            // Send 2FA OTP email
+            if let Ok(email_service) = crate::services::EmailService::new(self.config.email.clone())
+            {
+                let _ = email_service
+                    .send_two_factor_otp_email(
+                        &user.email,
+                        &user.name,
+                        &otp_code,
+                        10, // 10 minutes expiry
+                        &login_time,
+                        &ip_address,
+                        "Unknown", // Could be enhanced with geo IP lookup
+                        &user_agent,
+                        "Unknown Browser", // Could be enhanced with user agent parsing
+                        &self.config.email.from_name,
+                    )
+                    .await;
+            }
+
+            // Reset failed login attempts on successful password verification
+            if user.failed_login_attempts > 0 {
+                self.user_service
+                    .reset_user_failed_attempts(user.id)
+                    .await?;
+            }
+
+            // Log 2FA initiation activity
+            let activity_request = crate::services::activity::ActivityLogRequest {
+                user_id: user.id,
+                activity_type: "2fa_initiated".to_string(),
+                description: "Two-factor authentication initiated during login".to_string(),
+                ip_address: Some(ip_address),
+                user_agent: Some(user_agent),
+                metadata: Some(serde_json::json!({
+                    "otp_type": "email",
+                    "otp_expires_at": otp_data.expires_at
+                })),
+            };
+
+            let _ = self.activity_service.log_activity(activity_request).await;
+
+            return Ok(LoginResponse {
+                message: "Two-factor authentication required. Please check your email.".to_string(),
+                user: user.to_response(),
+                access_token: "".to_string(), // No token until 2FA is completed
+                refresh_token: "".to_string(),
+                expires_in: 0,
+                session_token: "".to_string(),
+            });
+        }
+
+        // Reset failed login attempts on successful login (no 2FA)
         if user.failed_login_attempts > 0 {
             self.user_service
                 .reset_user_failed_attempts(user.id)
