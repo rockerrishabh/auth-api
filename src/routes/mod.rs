@@ -12,15 +12,30 @@ pub fn configure_routes_simple(cfg: &mut web::ServiceConfig, config: AppConfig, 
         web::scope("/api/v1")
             .configure(|cfg| {
                 // Create auth middleware for auth routes
-                let auth_middleware = AuthMiddleware::new(config.clone())
-                    .expect("Failed to create auth middleware for auth routes");
-                auth::configure_auth_routes(cfg, auth_middleware);
+                match AuthMiddleware::new(config.clone()) {
+                    Ok(auth_middleware) => {
+                        auth::configure_auth_routes(cfg, auth_middleware);
+                    }
+                    Err(e) => {
+                        panic!("Failed to create auth middleware for auth routes: {}", e);
+                    }
+                }
             })
             .configure(|cfg| {
                 // Create auth middleware for admin routes
-                let auth_middleware = AuthMiddleware::new(config.clone())
-                    .expect("Failed to create auth middleware for admin routes");
-                admin::configure_admin_routes(cfg, auth_middleware, db_pool, config.clone());
+                match AuthMiddleware::new(config.clone()) {
+                    Ok(auth_middleware) => {
+                        admin::configure_admin_routes(
+                            cfg,
+                            auth_middleware,
+                            db_pool,
+                            config.clone(),
+                        );
+                    }
+                    Err(e) => {
+                        panic!("Failed to create auth middleware for admin routes: {}", e);
+                    }
+                }
             })
             .service(
                 web::scope("")

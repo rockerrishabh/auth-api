@@ -252,22 +252,33 @@ impl AuthService {
             let otp_code = otp_data.code.clone();
 
             // Send 2FA OTP email
-            if let Ok(email_service) = crate::services::EmailService::new(self.config.email.clone())
-            {
-                let _ = email_service
-                    .send_two_factor_otp_email(
-                        &user.email,
-                        &user.name,
-                        &otp_code,
-                        10, // 10 minutes expiry
-                        &login_time,
-                        &ip_address,
-                        "Unknown", // Could be enhanced with geo IP lookup
-                        &user_agent,
-                        "Unknown Browser", // Could be enhanced with user agent parsing
-                        &self.config.email.from_name,
-                    )
-                    .await;
+            match crate::services::EmailService::new(self.config.email.clone()) {
+                Ok(email_service) => {
+                    if let Err(email_err) = email_service
+                        .send_two_factor_otp_email(
+                            &user.email,
+                            &user.name,
+                            &otp_code,
+                            10, // 10 minutes expiry
+                            &login_time,
+                            &ip_address,
+                            "Unknown", // Could be enhanced with geo IP lookup
+                            &user_agent,
+                            "Unknown Browser", // Could be enhanced with user agent parsing
+                            &self.config.email.from_name,
+                        )
+                        .await
+                    {
+                        eprintln!("Failed to send 2FA email: {}", email_err);
+                        // Continue with 2FA flow even if email fails
+                        // User can still get OTP via API if needed
+                    }
+                }
+                Err(email_init_err) => {
+                    eprintln!("Failed to initialize email service: {}", email_init_err);
+                    // Continue with 2FA flow - OTP is stored in database
+                    // User can still complete 2FA via API if needed
+                }
             }
 
             // Reset failed login attempts on successful password verification

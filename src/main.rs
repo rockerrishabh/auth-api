@@ -23,22 +23,69 @@ use std::time::Duration;
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Load environment variables
-    dotenv::dotenv().ok();
+    match dotenv::dotenv() {
+        Ok(path) => info!("Loaded environment file: {:?}", path),
+        Err(_) => info!("No .env file found, using system environment variables"),
+    }
 
     // Initialize tracing
     tracing_subscriber::fmt::init();
 
     // Load configuration
-    let config = AppConfig::new().expect("Failed to load configuration");
+    let config = match AppConfig::new() {
+        Ok(config) => {
+            info!("Configuration loaded successfully");
+            config
+        }
+        Err(e) => {
+            eprintln!("Failed to load configuration: {}", e);
+            eprintln!("Make sure all required environment variables are set with APP_ prefix");
+            eprintln!("Required variables:");
+            eprintln!("  APP_ENVIRONMENT=production");
+            eprintln!("  APP_DATABASE__URL=postgresql://...");
+            eprintln!("  APP_JWT__SECRET=your-secret");
+            eprintln!("  APP_EMAIL__SMTP_HOST=your-smtp");
+            eprintln!("  APP_EMAIL__SMTP_USERNAME=your-email");
+            eprintln!("  APP_EMAIL__SMTP_PASSWORD=your-password");
+
+            // Debug: Print all APP_ environment variables
+            eprintln!("\nDebug: Current APP_ environment variables:");
+            for (key, value) in std::env::vars() {
+                if key.starts_with("APP_") {
+                    eprintln!("  {}={}", key, value);
+                }
+            }
+            eprintln!("");
+
+            panic!("Configuration loading failed: {}", e);
+        }
+    };
 
     info!("Starting auth service on {}:{}", config.host, config.port);
+    info!("Database URL: {}", config.database.url);
+    info!("Environment: {}", config.environment);
+    info!(
+        "Email SMTP: {}:{}",
+        config.email.smtp_host, config.email.smtp_port
+    );
 
     // Establish database connection
-    let db_pool = establish_connection(&config.database)
-        .await
-        .expect("Failed to establish database connection");
-
-    info!("Database connection established successfully");
+    info!("Attempting to connect to database...");
+    let db_pool = match establish_connection(&config.database).await {
+        Ok(pool) => {
+            info!("Database connection established successfully");
+            pool
+        }
+        Err(e) => {
+            eprintln!("Database connection failed: {}", e);
+            eprintln!("Database URL being used: {}", config.database.url);
+            eprintln!("Please check:");
+            eprintln!("1. APP_DATABASE__URL is set correctly");
+            eprintln!("2. Database credentials are valid");
+            eprintln!("3. Database server is running and accessible");
+            panic!("Database connection failed: {}", e);
+        }
+    };
 
     // Create HTTP server
     let config_data = web::Data::new(config.clone());
