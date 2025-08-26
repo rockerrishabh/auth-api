@@ -54,7 +54,8 @@ pub fn configure_auth_routes(cfg: &mut web::ServiceConfig, auth_middleware: Auth
                             .service(two_factor::setup_two_factor)
                             .service(two_factor::enable_two_factor)
                             .service(two_factor::verify_two_factor)
-                            .service(two_factor::disable_two_factor),
+                            .service(two_factor::disable_two_factor)
+                            .service(two_factor::send_login_otp),
                     )
                     .service(
                         web::scope("/user")

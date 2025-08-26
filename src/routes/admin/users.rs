@@ -73,26 +73,41 @@ pub async fn search_users(
     let sort_order = req.sort_order.as_deref().unwrap_or("desc");
 
     // Use the advanced user search service method
-    let (users_list, total) = user_service.advanced_user_search(
-        req.query.as_deref(), // Fixed: Use query instead of search_term
-        role_filter,
-        status_filter,
-        email_verified,
-        two_factor_enabled,
-        page as i64,
-        per_page as i64,
-        sort_by,
-        sort_order,
-    ).await?;
+    let (users_list, total) = user_service
+        .advanced_user_search(
+            req.query.as_deref(), // Fixed: Use query instead of search_term
+            role_filter,
+            status_filter,
+            email_verified,
+            two_factor_enabled,
+            page as i64,
+            per_page as i64,
+            sort_by,
+            sort_order,
+        )
+        .await?;
 
     // Create response with users from service
     let total_pages = (total + per_page - 1) / per_page;
     let filters_applied = vec![
         ("role".to_string(), req.role.clone().unwrap_or_default()),
         ("status".to_string(), req.status.clone().unwrap_or_default()),
-        ("email_verified".to_string(), req.email_verified.map(|v| v.to_string()).unwrap_or_default()),
-        ("two_factor_enabled".to_string(), req.two_factor_enabled.map(|v| v.to_string()).unwrap_or_default()),
-    ].into_iter().filter(|(_, v)| !v.is_empty()).collect();
+        (
+            "email_verified".to_string(),
+            req.email_verified
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
+        ),
+        (
+            "two_factor_enabled".to_string(),
+            req.two_factor_enabled
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
+        ),
+    ]
+    .into_iter()
+    .filter(|(_, v)| !v.is_empty())
+    .collect();
 
     let response = UserSearchResponse {
         users: users_list,
@@ -107,7 +122,7 @@ pub async fn search_users(
 
     Ok(HttpResponse::Ok().json(response))
 }
-           
+
 /// Bulk update user roles and statuses
 #[put("/bulk-update")]
 pub async fn bulk_update_users(

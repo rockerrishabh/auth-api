@@ -119,9 +119,7 @@ pub async fn send_welcome_email(
     // Create email service
     let email_service = EmailService::new(config.get_ref().email.clone())?;
 
-    email_service
-        .send_welcome_email(&req.to, &req.name)
-        .await?;
+    email_service.send_welcome_email(&req.to, &req.name).await?;
 
     Ok(HttpResponse::Ok().json(EmailResponse {
         message: "Welcome email sent successfully".to_string(),
@@ -194,20 +192,23 @@ pub async fn test_otp_email(
     let email_service = EmailService::new(config.get_ref().email.clone())?;
 
     // Generate a test OTP
-    let otp_service = crate::services::otp::OtpService::new(config.get_ref().security.clone(), pool.get_ref().clone());
+    let otp_service = crate::services::otp::OtpService::new(
+        config.get_ref().security.clone(),
+        pool.get_ref().clone(),
+    );
     let test_otp = otp_service.generate_otp(&crate::db::models::OtpType::EmailVerification);
 
     email_service
         .send_otp_email(
-            &req.to,
-            &req.name,
-            &test_otp,
-            5, // 5 minutes for testing
+            &req.to, &req.name, &test_otp, 5, // 5 minutes for testing
         )
         .await?;
 
     Ok(HttpResponse::Ok().json(EmailResponse {
-        message: format!("Test OTP email sent successfully to {} with code: {}", req.to, test_otp),
+        message: format!(
+            "Test OTP email sent successfully to {} with code: {}",
+            req.to, test_otp
+        ),
         success: true,
     }))
 }

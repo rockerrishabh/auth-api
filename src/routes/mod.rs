@@ -7,8 +7,6 @@ pub mod admin;
 pub mod auth;
 pub mod health;
 
-
-
 pub fn configure_routes_simple(cfg: &mut web::ServiceConfig, config: AppConfig, db_pool: DbPool) {
     cfg.service(
         web::scope("/api/v1")

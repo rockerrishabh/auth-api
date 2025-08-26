@@ -324,7 +324,7 @@ pub fn extract_ip_address(req: &HttpRequest) -> String {
 }
 
 /// Extract User-Agent from HTTP request
-fn extract_user_agent(req: &HttpRequest) -> String {
+pub fn extract_user_agent(req: &HttpRequest) -> String {
     req.headers()
         .get("user-agent")
         .and_then(|ua| ua.to_str().ok())

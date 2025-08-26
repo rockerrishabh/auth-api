@@ -1,7 +1,7 @@
+use crate::middleware::logging::LoggingMiddleware;
 use actix_cors::Cors;
 use actix_web::http::header;
 use actix_web::middleware::Compress;
-use crate::middleware::logging::LoggingMiddleware;
 use actix_web::middleware::NormalizePath;
 use actix_web::{web, App, HttpServer};
 use tracing::info;

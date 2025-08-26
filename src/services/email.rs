@@ -97,6 +97,14 @@ impl EmailService {
         )
         .map_err(|e| AuthError::InternalError(format!("Template engine error: {}", e)))?;
 
+        tera.add_raw_template(
+            "two_factor_otp",
+            &fs::read_to_string("templates/two_factor_otp.html").map_err(|e| {
+                AuthError::InternalError(format!("Failed to load two-factor OTP template: {}", e))
+            })?,
+        )
+        .map_err(|e| AuthError::InternalError(format!("Template engine error: {}", e)))?;
+
         Ok(Self {
             config,
             transport,
@@ -282,7 +290,7 @@ impl EmailService {
 
         let html_body = self
             .templates
-            .render("email_verification_otp", &context)
+            .render("two_factor_otp", &context)
             .map_err(|e| AuthError::InternalError(format!("Template render error: {}", e)))?;
 
         let plain_body = format!(
@@ -293,6 +301,77 @@ impl EmailService {
         let request = EmailRequest {
             to: to.to_string(),
             subject: "Two-Factor Authentication Code".to_string(),
+            body: plain_body,
+            html_body: Some(html_body),
+        };
+
+        self.send_email(request).await
+    }
+
+    /// Send comprehensive two-factor authentication OTP email with device info
+    pub async fn send_two_factor_otp_email(
+        &self,
+        to: &str,
+        name: &str,
+        otp_code: &str,
+        expiry_minutes: i32,
+        login_time: &str,
+        ip_address: &str,
+        location: &str,
+        user_agent: &str,
+        browser_info: &str,
+        app_name: &str,
+    ) -> AuthResult<()> {
+        let mut context = Context::new();
+        context.insert("name", name);
+        context.insert("otp_code", otp_code);
+        context.insert("expiry_minutes", &expiry_minutes);
+        context.insert("login_time", login_time);
+        context.insert("ip_address", ip_address);
+        context.insert("location", location);
+        context.insert("user_agent", user_agent);
+        context.insert("browser_info", browser_info);
+        context.insert("app_name", app_name);
+
+        let html_body = self
+            .templates
+            .render("two_factor_otp", &context)
+            .map_err(|e| AuthError::InternalError(format!("Template render error: {}", e)))?;
+
+        let plain_body = format!(
+            "Hello {},
+
+A login attempt was detected for your {} account.
+
+Verification Code: {}
+Expires in: {} minutes
+
+Login Details:
+Time: {}
+IP Address: {}
+Location: {}
+Device: {}
+Browser: {}
+
+If this wasn't you, please secure your account immediately.
+
+Best regards,
+The {} Security Team",
+            name,
+            app_name,
+            otp_code,
+            expiry_minutes,
+            login_time,
+            ip_address,
+            location,
+            user_agent,
+            browser_info,
+            app_name
+        );
+
+        let request = EmailRequest {
+            to: to.to_string(),
+            subject: format!("{} - Two-Factor Authentication Code", app_name),
             body: plain_body,
             html_body: Some(html_body),
         };
@@ -424,6 +503,10 @@ mod tests {
         assert!(email_service
             .templates
             .get_template("email_verification_otp")
+            .is_ok());
+        assert!(email_service
+            .templates
+            .get_template("two_factor_otp")
             .is_ok());
     }
 }

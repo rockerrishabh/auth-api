@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>Two-Factor Authentication - {{ app_name }}</title>
+    <style>
+        /* Reset and base styles for better email client compatibility */
+        body, table, td, p, a, li, blockquote {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+        table, td {
+            /* Microsoft Outlook table spacing fixes - required for proper email rendering */
+            /* stylelint-disable-next-line property-no-unknown */
+            -ms-table-lspace: 0pt;
+            /* stylelint-disable-next-line property-no-unknown */
+            -ms-table-rspace: 0pt;
+        }
+        img {
+            -ms-interpolation-mode: bicubic;
+        }
+
+        /* Base styles */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+        }
+
+        .email-wrapper {
+            width: 100%;
+            background-color: #f8f9fa;
+            padding: 20px 0;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        .content {
+            padding: 40px 30px;
+            background-color: #ffffff;
+        }
+
+        .alert-message {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 20px;
+        }
+
+        .main-message {
+            font-size: 16px;
+            margin-bottom: 30px;
+            color: #555555;
+        }
+
+        .otp-section {
+            background: linear-gradient(135deg, #f3e5f5 0%, #e8eaf6 100%);
+            border: 2px solid #9c27b0;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            margin: 30px 0;
+            position: relative;
+        }
+
+        .otp-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .otp-code {
+            font-size: 36px;
+            font-weight: 700;
+            color: #9c27b0;
+            letter-spacing: 8px;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 2px solid #9c27b0;
+            border-radius: 8px;
+            padding: 20px 30px;
+            margin: 20px 0;
+            display: inline-block;
+            user-select: all;
+            -webkit-user-select: all;
+            -moz-user-select: all;
+            -ms-user-select: all;
+        }
+
+        .otp-notice {
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            border-left: 4px solid #9c27b0;
+        }
+
+        .otp-notice h4 {
+            margin: 0 0 10px 0;
+            color: #7b1fa2;
+            font-size: 16px;
+        }
+
+        .otp-notice p {
+            margin: 0;
+            color: #6a1b9a;
+            font-size: 14px;
+        }
+
+        .device-info {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+        }
+
+        .device-info h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+            font-size: 16px;
+        }
+
+        .device-info table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .device-info td {
+            padding: 6px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .device-info .label {
+            font-weight: 600;
+            color: #6c757d;
+            width: 100px;
+            vertical-align: top;
+        }
+
+        .device-info .value {
+            color: #495057;
+        }
+
+        .security-notice {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 25px 0;
+        }
+
+        .security-notice h4 {
+            margin: 0 0 10px 0;
+            color: #856404;
+            font-size: 16px;
+        }
+
+        .security-notice ul {
+            margin: 10px 0 0 0;
+            padding-left: 20px;
+        }
+
+        .security-notice li {
+            margin-bottom: 5px;
+            color: #856404;
+        }
+
+        .footer {
+            background-color: #1a1a1a;
+            color: #cccccc;
+            padding: 30px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .footer p {
+            margin: 5px 0;
+        }
+
+        .footer a {
+            color: #9c27b0;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive design */
+        @media only screen and (max-width: 600px) {
+            .container {
+                margin: 0 10px;
+                border-radius: 8px;
+            }
+
+            .header, .content, .footer {
+                padding: 20px 20px;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+
+            .otp-section {
+                padding: 20px;
+            }
+
+            .otp-code {
+                font-size: 28px;
+                letter-spacing: 4px;
+                padding: 15px 20px;
+            }
+
+            .device-info {
+                padding: 15px;
+            }
+
+            .device-info .label {
+                display: block;
+                width: 100%;
+                font-weight: 600;
+                margin-bottom: 5px;
+            }
+
+            .device-info .value {
+                display: block;
+                padding-left: 0;
+            }
+        }
+
+        /* Print styles */
+        @media print {
+            .email-wrapper {
+                padding: 0;
+            }
+
+            .container {
+                box-shadow: none;
+                border-radius: 0;
+            }
+
+            .otp-code {
+                background-color: #f0f0f0 !important;
+                border: 2px dashed #9c27b0 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-wrapper">
+        <div class="container">
+            <!-- Header -->
+            <div class="header">
+                <h1>🔐 Two-Factor Authentication</h1>
+            </div>
+
+            <!-- Main Content -->
+            <div class="content">
+                <h2 class="alert-message">Hello {{ name }}!</h2>
+
+                <p class="main-message">
+                    We've detected a login attempt to your <strong>{{ app_name }}</strong> account.
+                    For your security, please verify this login by entering the code below:
+                </p>
+
+                <!-- OTP Code Section -->
+                <div class="otp-section">
+                    <div class="otp-icon">🔢</div>
+                    <div class="otp-code">{{ otp_code }}</div>
+
+                    <div class="otp-notice">
+                        <h4>Verification Code</h4>
+                        <p>This code will expire in <strong>{{ expiry_minutes }} minutes</strong> and can only be used once.</p>
+                    </div>
+                </div>
+
+                <!-- Device Information -->
+                <div class="device-info">
+                    <h4>📱 Login Details</h4>
+                    <table>
+                        <tr>
+                            <td class="label">Time:</td>
+                            <td class="value">{{ login_time }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">IP Address:</td>
+                            <td class="value">{{ ip_address }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Location:</td>
+                            <td class="value">{{ location }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Device:</td>
+                            <td class="value">{{ user_agent }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Browser:</td>
+                            <td class="value">{{ browser_info }}</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- Security Notice -->
+                <div class="security-notice">
+                    <h4>🛡️ Security Information</h4>
+                    <ul>
+                        <li><strong>Don't recognize this login?</strong> Contact our security team immediately</li>
+                        <li><strong>Keep your code secure</strong> - Never share it with anyone</li>
+                        <li><strong>Code expires soon</strong> - Use it within {{ expiry_minutes }} minutes</li>
+                        <li><strong>One-time use only</strong> - This code becomes invalid after use</li>
+                        <li><strong>Regular monitoring</strong> - Check your account activity regularly</li>
+                    </ul>
+                </div>
+
+                <!-- Instructions -->
+                <div style="background-color: #e8f5e8; border-left: 4px solid #4caf50; padding: 20px; margin: 25px 0; border-radius: 0 8px 8px 0;">
+                    <h4 style="margin: 0 0 10px 0; color: #2e7d32;">📋 How to Complete Verification</h4>
+                    <ol style="margin: 0; padding-left: 20px;">
+                        <li>Enter the 6-digit code shown above in the verification form</li>
+                        <li>Click "Verify" or "Confirm" to complete the login</li>
+                        <li>You will be automatically logged into your account</li>
+                    </ol>
+                </div>
+
+                <p style="color: #666; font-size: 14px;">
+                    If you didn't attempt to log in, please secure your account immediately by changing your password
+                    and enabling additional security features. Contact our security team if you need assistance.
+                </p>
+
+                <p style="margin-bottom: 0;">
+                    Stay secure,<br>
+                    <strong>The {{ app_name }} Security Team</strong>
+                </p>
+            </div>
+
+            <!-- Footer -->
+            <div class="footer">
+                <p><strong>{{ app_name }}</strong></p>
+                <p>&copy; 2024 {{ app_name }}. All rights reserved.</p>
+                <p>
+                    This is an automated two-factor authentication message.<br>
+                    Please do not reply to this email.
+                </p>
+                <p>
+                    Need help? <a href="{{ support_url }}">Contact Support</a> |
+                    <a href="{{ security_help_url }}">Security Help</a> |
+                    <a href="{{ help_url }}">Help Center</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

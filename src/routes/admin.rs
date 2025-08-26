@@ -232,10 +232,7 @@ pub fn configure_admin_routes(
                     .service(users::get_user_preferences)
                     .service(users::update_user_preferences),
             )
-            .service(
-                web::scope("/sessions")
-                    .service(session_management::get_session_statistics),
-            )
+            .service(web::scope("/sessions").service(session_management::get_session_statistics))
             .service(
                 web::scope("/dashboard")
                     .service(dashboard::get_dashboard_stats)

@@ -35,7 +35,6 @@ pub struct ActivityService {
     db_pool: DbPool,
 }
 
-
 impl ActivityService {
     pub fn new(db_pool: DbPool) -> Self {
         Self { db_pool }
