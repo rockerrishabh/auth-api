@@ -48,7 +48,6 @@ A comprehensive, production-ready authentication API built with Rust, Actix Web,
 ### Developer Experience
 
 - ✅ **Comprehensive Error Handling**
-- ✅ **Extensive Test Coverage** (27+ tests)
 - ✅ **Clean Architecture** with services
 - ✅ **Configuration Management** (TOML)
 - ✅ **Database Migrations** with Diesel
@@ -508,24 +507,6 @@ The application includes comprehensive HTML email templates optimized for variou
 
 ## 🔧 Development
 
-### Running Tests
-
-```bash
-# Run all tests
-cargo test
-
-# Run specific test file
-cargo test --test user_service_tests
-cargo test --test jwt_service_tests
-cargo test --test password_service_tests
-
-# Run tests with output
-cargo test -- --nocapture
-
-# Run only unit tests
-cargo test --lib
-```
-
 ### Code Quality
 
 ```bash
@@ -633,31 +614,15 @@ CMD ["auth-api"]
 1. **Fork the repository**
 2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
 3. **Make your changes**
-4. **Add tests** for new functionality
-5. **Run tests** (`cargo test`)
-6. **Format code** (`cargo fmt`)
-7. **Submit a pull request**
+4. **Format code** (`cargo fmt`)
+5. **Submit a pull request**
 
 ### Development Guidelines
 
 - Follow Rust best practices and idioms
-- Add comprehensive tests for new features
 - Update documentation for API changes
 - Use meaningful commit messages
-- Ensure all tests pass before submitting PR
 - Follow the existing code architecture
-
-## 📊 Test Coverage
-
-The project includes comprehensive test coverage:
-
-- **JWT Service Tests** (8 tests) - Token generation, verification, expiry
-- **Password Service Tests** (8 tests) - Hashing, validation, strength checking
-- **OTP Service Tests** (9 tests) - OTP generation, validation, cleanup
-- **Email Service Tests** (2 tests) - Email serialization and service creation
-- **Integration Tests** - End-to-end authentication flow
-
-**Total: 27 tests with 100% pass rate**
 
 ## 📄 License
 
