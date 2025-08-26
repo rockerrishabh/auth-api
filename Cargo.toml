@@ -40,6 +40,3 @@ default = []
 avif-encoding = ["ravif"]
 
 [dev-dependencies]
-tokio-test = "0.4"
-tempfile = "3.8"
-diesel_migrations = "2.2.0"
