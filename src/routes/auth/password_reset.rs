@@ -189,9 +189,22 @@ async fn perform_password_reset_cleanup(
         pool.get_ref().clone(),
     );
 
-    // Clean up expired OTPs (this would normally be in a separate cleanup job)
-    if let Err(e) = cleanup_expired_user_otps(&otp_service, user_id).await {
-        eprintln!("Failed to cleanup expired OTPs: {:?}", e);
+    // Clean up expired OTPs for this user
+    match otp_service.cleanup_expired_otps_for_user(user_id).await {
+        Ok(deleted_count) => {
+            if deleted_count > 0 {
+                println!(
+                    "Cleaned up {} expired OTPs for user {}",
+                    deleted_count, user_id
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!(
+                "Failed to cleanup expired OTPs for user {}: {:?}",
+                user_id, e
+            );
+        }
     }
 
     // 2. Log password reset activity
@@ -238,24 +251,6 @@ async fn perform_password_reset_cleanup(
             e
         );
     }
-
-    Ok(())
-}
-
-/// Clean up expired OTPs for a specific user
-async fn cleanup_expired_user_otps(
-    _otp_service: &crate::services::otp::OtpService,
-    user_id: uuid::Uuid,
-) -> AuthResult<()> {
-    // This is a placeholder for actual OTP cleanup logic
-    // In a real implementation, you'd query and delete expired OTPs from the database
-    println!("Cleaning up expired OTPs for user: {}", user_id);
-
-    // Example implementation would be:
-    // let expired_otps = otp_service.get_expired_otps_for_user(user_id).await?;
-    // for otp in expired_otps {
-    //     otp_service.delete_otp(otp.id).await?;
-    // }
 
     Ok(())
 }

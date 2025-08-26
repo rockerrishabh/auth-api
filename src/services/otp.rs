@@ -434,6 +434,28 @@ impl OtpService {
 
         Ok(deleted_count)
     }
+
+    /// Clean up expired OTPs for a specific user
+    pub async fn cleanup_expired_otps_for_user(&self, user_id: Uuid) -> AuthResult<usize> {
+        let mut conn = self
+            .db_pool
+            .get()
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
+        let now = Utc::now();
+
+        let deleted_count = diesel::delete(
+            otps::table.filter(otps::user_id.eq(user_id)).filter(
+                otps::expires_at
+                    .lt(now)
+                    .or(otps::is_used.eq(true))
+                    .or(otps::attempts_remaining.le(0)),
+            ),
+        )
+        .execute(&mut conn)
+        .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
+
+        Ok(deleted_count)
+    }
 }
 
 #[cfg(test)]

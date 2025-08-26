@@ -11,7 +11,7 @@ pub mod schemas;
 
 pub type DbPool = Pool<ConnectionManager<PgConnection>>;
 
-const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
+const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
 pub async fn establish_connection(
     config: &DatabaseConfig,
