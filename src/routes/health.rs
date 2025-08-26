@@ -10,13 +10,19 @@ pub async fn health_check(
     // Test database connection
     let db_status = match pool.get() {
         Ok(_) => "healthy",
-        Err(_) => return Err(AuthError::ServiceUnavailable),
+        Err(e) => {
+            println!("Database connection error: {}", e);
+            return Err(AuthError::ServiceUnavailable);
+        }
     };
 
     // Test email service
     let email_status = match crate::services::EmailService::new(config.email.clone()) {
         Ok(_) => "healthy",
-        Err(_) => return Err(AuthError::ServiceUnavailable),
+        Err(e) => {
+            println!("Email service error: {}", e);
+            return Err(AuthError::ServiceUnavailable);
+        }
     };
 
     // If all services are healthy, return success
@@ -40,19 +46,28 @@ pub async fn detailed_health_check(
     // Test database connection
     let db_status = match pool.get() {
         Ok(_) => "healthy",
-        Err(_) => "unhealthy",
+        Err(e) => {
+            println!("Database connection error in detailed health: {}", e);
+            "unhealthy"
+        }
     };
 
     // Test email service
     let email_status = match crate::services::EmailService::new(config.email.clone()) {
         Ok(_) => "healthy",
-        Err(_) => "unhealthy",
+        Err(e) => {
+            println!("Email service error in detailed health: {}", e);
+            "unhealthy"
+        }
     };
 
     // Test JWT service
     let jwt_status = match crate::services::jwt::JwtService::new(config.jwt.clone()) {
         Ok(_) => "healthy",
-        Err(_) => "unhealthy",
+        Err(e) => {
+            println!("JWT service error in detailed health: {}", e);
+            "unhealthy"
+        }
     };
 
     // Determine overall health status
@@ -60,9 +75,10 @@ pub async fn detailed_health_check(
         if db_status == "healthy" && email_status == "healthy" && jwt_status == "healthy" {
             "healthy"
         } else {
-            return Err(AuthError::ServiceUnavailable);
+            "unhealthy"
         };
 
+    // Always return success with detailed status, don't fail the endpoint
     Ok(HttpResponse::Ok().json(json!({
         "status": overall_status,
         "service": "auth-api",

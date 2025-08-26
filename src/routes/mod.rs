@@ -9,7 +9,7 @@ pub mod health;
 
 pub fn configure_routes_simple(cfg: &mut web::ServiceConfig, config: AppConfig, db_pool: DbPool) {
     cfg.service(
-        web::scope("/api/v1")
+        web::scope("/v1")
             .configure(|cfg| {
                 // Create auth middleware for auth routes
                 match AuthMiddleware::new(config.clone()) {
