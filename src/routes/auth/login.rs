@@ -73,7 +73,7 @@ pub async fn login_user(
             .http_only(true)
             .secure(config.is_production()) // Only HTTPS in production
             .same_site(actix_web::cookie::SameSite::Lax)
-            .path("/api/v1/auth")
+            .path("/v1/auth")
             .max_age(actix_web::cookie::time::Duration::hours(24 * 7)) // 7 days
             .finish();
 

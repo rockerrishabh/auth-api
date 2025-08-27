@@ -27,7 +27,7 @@ pub async fn logout_user(
         .http_only(true)
         .secure(true) // Always secure for logout
         .same_site(actix_web::cookie::SameSite::Strict)
-        .path("/api/v1/auth")
+        .path("/v1/auth")
         .max_age(actix_web::cookie::time::Duration::seconds(0)) // Expire immediately
         .finish();
 
