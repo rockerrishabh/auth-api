@@ -4,9 +4,15 @@ use crate::{
     error::AuthResult,
     middleware::extract_user_id_from_request,
     services::{
-        email::EmailService,
-        otp::{OtpRequest, OtpService, OtpVerificationRequest},
-        user::UserService,
+        core::{
+            auth::{extract_ip_address, extract_user_agent},
+            user::UserService,
+        },
+        utils::{
+            email::EmailService,
+            geoip::GeoIPService,
+            otp::{OtpRequest, OtpService, OtpVerificationRequest},
+        },
     },
 };
 use actix_web::{get, post, web, HttpRequest, HttpResponse};
@@ -78,7 +84,7 @@ pub async fn create_otp(
     config: web::Data<AppConfig>,
     req: web::Json<GenerateCustomOtpRequest>,
     http_req: HttpRequest,
-    geo_ip_service: Option<web::Data<Option<crate::services::geoip::GeoIPService>>>,
+    geo_ip_service: Option<web::Data<Option<GeoIPService>>>,
 ) -> AuthResult<HttpResponse> {
     req.validate()
         .map_err(|e| crate::error::AuthError::ValidationFailed(e.to_string()))?;
@@ -129,8 +135,8 @@ pub async fn create_otp(
             // Get user info for 2FA email
             if let Ok(Some(current_user)) = user_service.get_user_by_id(current_user_id).await {
                 let user_name = current_user.username.clone();
-                let ip_address = crate::services::auth::extract_ip_address(&http_req);
-                let user_agent = crate::services::auth::extract_user_agent(&http_req);
+                let ip_address = extract_ip_address(&http_req);
+                let user_agent = extract_user_agent(&http_req);
                 let geo_ip_ref = geo_ip_service
                     .as_ref()
                     .and_then(|data| data.as_ref().as_ref());

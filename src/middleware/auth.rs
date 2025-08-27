@@ -8,8 +8,7 @@ use futures_util::future::{ready, LocalBoxFuture, Ready};
 use std::rc::Rc;
 use uuid::Uuid;
 
-use crate::config::AppConfig;
-use crate::services::jwt::JwtService;
+use crate::{config::AppConfig, services::utils::jwt::JwtService};
 
 #[derive(Clone)]
 pub struct AuthMiddleware {

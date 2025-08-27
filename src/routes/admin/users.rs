@@ -1,4 +1,7 @@
-use crate::{db::DbPool, services::UserService};
+use crate::{
+    db::DbPool,
+    services::core::{user::UserResponse, user::UserService},
+};
 use actix_web::{get, post, put, web, HttpRequest, HttpResponse};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -30,7 +33,7 @@ pub struct BulkUserUpdateRequest {
 
 #[derive(Debug, Serialize)]
 pub struct UserSearchResponse {
-    pub users: Vec<crate::services::user::UserResponse>,
+    pub users: Vec<UserResponse>,
     pub total: i64,
     pub page: i64,
     pub per_page: i64,

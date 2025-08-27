@@ -3,7 +3,13 @@ use crate::{
     db::DbPool,
     error::AuthResult,
     middleware::extract_user_id_from_request,
-    services::{email::EmailService, otp::OtpService, user::UserService},
+    services::{
+        core::{
+            auth::{extract_ip_address, extract_user_agent},
+            user::UserService,
+        },
+        utils::{email::EmailService, geoip::GeoIPService, otp::OtpService},
+    },
 };
 use actix_web::{get, post, put, web, HttpRequest, HttpResponse};
 use chrono::Utc;
@@ -245,7 +251,7 @@ pub async fn lock_user_account(
     config: web::Data<AppConfig>,
     req: web::Json<LockUserAccountRequest>,
     http_req: HttpRequest,
-    geo_ip_service: Option<web::Data<Option<crate::services::geoip::GeoIPService>>>,
+    geo_ip_service: Option<web::Data<Option<GeoIPService>>>,
 ) -> AuthResult<HttpResponse> {
     // Admin only endpoint
     let current_user_id = extract_user_id_from_request(&http_req)
@@ -282,8 +288,8 @@ pub async fn lock_user_account(
         let email_service = EmailService::new(config.email.clone());
         if let Ok(email_svc) = email_service {
             let reason = req.reason.as_deref().unwrap_or("Administrative action");
-            let ip_address = crate::services::auth::extract_ip_address(&http_req);
-            let user_agent = crate::services::auth::extract_user_agent(&http_req);
+            let ip_address = extract_ip_address(&http_req);
+            let user_agent = extract_user_agent(&http_req);
 
             let geo_ip_ref = geo_ip_service
                 .as_ref()

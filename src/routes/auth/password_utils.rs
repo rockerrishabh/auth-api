@@ -1,4 +1,4 @@
-use crate::{error::AuthResult, services::password::PasswordService};
+use crate::{error::AuthResult, services::core::password::PasswordService};
 use actix_web::{get, post, web, HttpResponse};
 use serde::{Deserialize, Serialize};
 

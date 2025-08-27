@@ -2,7 +2,7 @@ use crate::{
     db::DbPool,
     error::AuthResult,
     middleware::extract_user_id_from_request,
-    services::{session::SessionService, user::UserService},
+    services::core::{session::SessionService, user::UserService},
 };
 use actix_web::{delete, get, web, HttpRequest, HttpResponse};
 use serde::{Deserialize, Serialize};

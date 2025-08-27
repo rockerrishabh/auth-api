@@ -1,7 +1,16 @@
 use crate::{
     config::AppConfig,
     db::DbPool,
-    services::{EmailService, OtpService, UserService},
+    services::{
+        core::{
+            auth::{extract_ip_address, extract_user_agent},
+            user::UserService,
+        },
+        utils::{
+            email::EmailService,
+            otp::{OtpRequest, OtpService, OtpVerificationRequest},
+        },
+    },
 };
 use actix_web::{post, web, HttpRequest, HttpResponse};
 use validator::Validate;
@@ -65,7 +74,7 @@ pub async fn enable_two_factor(
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
     // Verify OTP code from database
-    let verification_request = crate::services::otp::OtpVerificationRequest {
+    let verification_request = OtpVerificationRequest {
         user_id: user.id,
         otp_type: crate::db::models::OtpType::TwoFactor,
         code: req.otp_code.clone(),
@@ -86,8 +95,8 @@ pub async fn enable_two_factor(
         .await?;
 
     // Send comprehensive 2FA confirmation email with device info
-    let ip_address = crate::services::auth::extract_ip_address(&http_req);
-    let user_agent = crate::services::auth::extract_user_agent(&http_req);
+    let ip_address = extract_ip_address(&http_req);
+    let user_agent = extract_user_agent(&http_req);
 
     email_service
         .send_two_factor_otp_email(
@@ -144,7 +153,7 @@ pub async fn verify_two_factor(
     }
 
     // Verify OTP code from database
-    let verification_request = crate::services::otp::OtpVerificationRequest {
+    let verification_request = OtpVerificationRequest {
         user_id: user.id,
         otp_type: crate::db::models::OtpType::TwoFactor,
         code: req.otp_code.clone(),
@@ -195,7 +204,7 @@ pub async fn disable_two_factor(
     }
 
     // Verify OTP code from database
-    let verification_request = crate::services::otp::OtpVerificationRequest {
+    let verification_request = OtpVerificationRequest {
         user_id: user.id,
         otp_type: crate::db::models::OtpType::TwoFactor,
         code: req.otp_code.clone(),
@@ -256,7 +265,7 @@ pub async fn send_login_otp(
     }
 
     // Create and store OTP in database
-    let otp_request = crate::services::otp::OtpRequest {
+    let otp_request = OtpRequest {
         user_id: user.id,
         otp_type: crate::db::models::OtpType::TwoFactor,
         email: Some(user.email.clone()),
@@ -267,8 +276,8 @@ pub async fn send_login_otp(
     let otp_code = otp_data.code.clone();
 
     // Extract request information for the email
-    let ip_address = crate::services::auth::extract_ip_address(&http_req);
-    let user_agent = crate::services::auth::extract_user_agent(&http_req);
+    let ip_address = extract_ip_address(&http_req);
+    let user_agent = extract_user_agent(&http_req);
     let login_time = chrono::Utc::now()
         .format("%Y-%m-%d %H:%M:%S UTC")
         .to_string();

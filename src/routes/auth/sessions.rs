@@ -1,4 +1,4 @@
-use crate::{db::DbPool, services::SessionService};
+use crate::{db::DbPool, services::core::session::SessionService};
 use actix_web::{delete, get, web, HttpRequest, HttpResponse};
 
 #[derive(Debug, serde::Serialize)]

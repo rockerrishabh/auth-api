@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::db::schemas::*;
+use crate::services::core::user::UserResponse;
 
 // Enum definitions using diesel_derive_enum v3
 #[derive(Debug, Clone, Serialize, Deserialize, DbEnum)]
@@ -79,25 +80,6 @@ pub struct NewUser {
     pub name: String,
     pub role: UserRole,
     pub account_status: AccountStatus,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserResponse {
-    pub id: Uuid,
-    pub username: String,
-    pub email: String,
-    pub name: String,
-    pub role: String,
-    pub email_verified: bool,
-    pub phone: Option<String>,
-    pub phone_verified: bool,
-    pub two_factor_enabled: bool,
-    pub account_status: String,
-    pub avatar: Option<String>,
-    pub avatar_thumbnail: Option<String>,
-    pub last_login_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
 }
 
 // OTP Models
@@ -323,16 +305,23 @@ impl User {
             id: self.id,
             username: self.username.clone(),
             email: self.email.clone(),
-            name: self.name.clone(),
             role: format!("{:?}", self.role).to_lowercase(),
-            email_verified: self.email_verified,
+            email_verified_at: if self.email_verified {
+                Some(self.updated_at)
+            } else {
+                None
+            },
             phone: self.phone.clone(),
             phone_verified: self.phone_verified,
             two_factor_enabled: self.two_factor_enabled,
+            last_login_at: self.last_login_at,
+            last_login_ip: None,      // Not available in this model
+            failed_login_attempts: 0, // Not available in this model
+            locked_until: None,       // Not available in this model
             account_status: format!("{:?}", self.account_status).to_lowercase(),
+            preferences: None, // Not available in this model
             avatar: self.avatar.clone(),
             avatar_thumbnail: self.avatar_thumbnail.clone(),
-            last_login_at: self.last_login_at,
             created_at: self.created_at,
             updated_at: self.updated_at,
         }

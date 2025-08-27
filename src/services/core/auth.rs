@@ -5,12 +5,22 @@ use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::session::{SessionRequest, SessionService};
 use crate::{
     config::AppConfig,
     db::{models::*, schemas::*, DbPool},
     error::{AuthError, AuthResult},
     services::{
-        activity::ActivityService, jwt::JwtService, session::SessionService, user::UserService,
+        activity::ActivityService,
+        core::{
+            password::PasswordService,
+            user::{UserResponse, UserService},
+        },
+        utils::{
+            email::EmailService,
+            jwt::JwtService,
+            otp::{OtpRequest, OtpService},
+        },
     },
 };
 
@@ -247,22 +257,19 @@ impl AuthService {
                 .to_string();
 
             // Create and store OTP in database
-            let otp_request = crate::services::otp::OtpRequest {
+            let otp_request = OtpRequest {
                 user_id: user.id,
                 otp_type: crate::db::models::OtpType::TwoFactor,
                 email: Some(user.email.clone()),
                 phone: None,
             };
 
-            let otp_service = crate::services::otp::OtpService::new(
-                self.config.security.clone(),
-                self.db_pool.clone(),
-            );
+            let otp_service = OtpService::new(self.config.security.clone(), self.db_pool.clone());
             let otp_data = otp_service.store_otp(&otp_request).await?;
             let otp_code = otp_data.code.clone();
 
             // Send 2FA OTP email
-            match crate::services::EmailService::new(self.config.email.clone()) {
+            match EmailService::new(self.config.email.clone()) {
                 Ok(email_service) => {
                     if let Err(email_err) = email_service
                         .send_two_factor_otp_email(
@@ -347,7 +354,7 @@ impl AuthService {
             .await?;
 
         // Create session
-        let session_request = crate::services::session::SessionRequest {
+        let session_request = SessionRequest {
             user_id: user.id,
             ip_address: ip_address.clone(),
             user_agent: user_agent.clone(),
@@ -390,7 +397,7 @@ impl AuthService {
 
     fn verify_password(&self, password: &str, hash: &str) -> AuthResult<bool> {
         // Use the dedicated PasswordService for verification with custom argon2 config
-        let password_service = crate::services::PasswordService::new(self.config.clone());
+        let password_service = PasswordService::new(self.config.clone());
         password_service.verify_password(password, hash)
     }
 }

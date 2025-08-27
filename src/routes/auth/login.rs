@@ -1,8 +1,13 @@
 use crate::config::AppConfig;
 use crate::db::DbPool;
-use crate::services::auth::{AuthService, LoginRequest};
-use crate::services::UserService;
-use crate::services::{activity::ActivityService, jwt::JwtService, session::SessionService};
+use crate::services::core::user::UserResponse;
+use crate::services::{
+    activity::ActivityService,
+    core::auth::{AuthService, LoginRequest},
+    core::session::SessionService,
+    core::user::UserService,
+    utils::jwt::JwtService,
+};
 use actix_web::{post, web, HttpRequest, HttpResponse};
 use serde::Serialize;
 use validator::Validate;
@@ -10,7 +15,7 @@ use validator::Validate;
 #[derive(Debug, Serialize)]
 pub struct SecureLoginResponse {
     pub message: String,
-    pub user: crate::db::models::UserResponse,
+    pub user: UserResponse,
     pub access_token: String,
     pub expires_in: u64,
 }
@@ -18,7 +23,7 @@ pub struct SecureLoginResponse {
 #[derive(Debug, Serialize)]
 pub struct TwoFactorRequiredResponse {
     pub message: String,
-    pub user: crate::db::models::UserResponse,
+    pub user: UserResponse,
     pub two_factor_required: bool,
     pub otp_sent: bool,
 }

@@ -3,8 +3,12 @@ use crate::{
     db::DbPool,
     error::{AuthError, AuthResult},
     services::{
-        activity::ActivityService, auth::extract_ip_address, email::EmailService, jwt::JwtService,
-        PasswordService, UserService,
+        activity::ActivityService,
+        core::{
+            auth::extract_ip_address, password::PasswordResetRequest, password::PasswordService,
+            session::SessionService, user::UserService,
+        },
+        utils::{email::EmailService, jwt::JwtService},
     },
 };
 use actix_web::{get, post, web, HttpRequest, HttpResponse};
@@ -175,7 +179,7 @@ pub async fn complete_password_reset(
         .ok_or(AuthError::UserNotFound)?;
 
     // Validate password strength using the validate_password_reset method
-    let password_reset_request = crate::services::password::PasswordResetRequest {
+    let password_reset_request = PasswordResetRequest {
         new_password: req.new_password.clone(),
         confirm_password: req.new_password.clone(), // Use same password for confirmation
     };
@@ -212,7 +216,7 @@ async fn perform_password_reset_cleanup(
         user_id,
         activity_type: "password_reset".to_string(),
         description: "Password was reset successfully".to_string(),
-        ip_address: Some(crate::services::auth::extract_ip_address(&http_req)),
+        ip_address: Some(extract_ip_address(&http_req)),
         user_agent: http_req
             .headers()
             .get("user-agent")
@@ -230,7 +234,7 @@ async fn perform_password_reset_cleanup(
 
     // Send password reset confirmation email
     if let Some(config) = http_req.app_data::<web::Data<crate::config::AppConfig>>() {
-        let email_service = crate::services::email::EmailService::new(config.email.clone());
+        let email_service = EmailService::new(config.email.clone());
 
         if let Ok(_) = email_service {
             // In a real implementation, you'd send a confirmation email here
@@ -243,7 +247,7 @@ async fn perform_password_reset_cleanup(
     }
 
     // Revoke all existing sessions for security
-    let session_service = crate::services::session::SessionService::new(pool.get_ref().clone());
+    let session_service = SessionService::new(pool.get_ref().clone());
     if let Err(e) = session_service.revoke_all_user_sessions(user_id).await {
         eprintln!(
             "Failed to revoke user sessions after password reset: {:?}",

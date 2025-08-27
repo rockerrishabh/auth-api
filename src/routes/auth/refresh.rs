@@ -1,5 +1,5 @@
 use crate::config::AppConfig;
-use crate::services::jwt::JwtService;
+use crate::services::utils::jwt::JwtService;
 use actix_web::{post, web, HttpRequest, HttpResponse};
 use serde::Serialize;
 

@@ -4,7 +4,7 @@ use crate::{
     middleware::extract_user_id_from_request,
     services::{
         activity::{ActivityLogRequest, ActivityService},
-        user::UserService,
+        core::user::UserService,
     },
 };
 use actix_web::{get, post, web, HttpRequest, HttpResponse};

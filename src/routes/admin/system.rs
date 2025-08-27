@@ -1,7 +1,11 @@
 use crate::{
     config::AppConfig,
     db::DbPool,
-    services::{EmailService, SystemService},
+    services::utils::{
+        email::{EmailRequest, EmailService},
+        geoip::GeoIPService,
+        system::SystemService,
+    },
 };
 use actix_web::{get, post, put, web, HttpRequest, HttpResponse};
 use serde::Serialize;
@@ -380,7 +384,7 @@ pub async fn get_system_health(
         Ok(email_service) => {
             // Try to send a test email to verify SMTP connection
             match email_service
-                .send_email(crate::services::email::EmailRequest {
+                .send_email(EmailRequest {
                     to: config.email.from_email.clone(),
                     subject: "Health Check Test".to_string(),
                     body: "This is a health check test email.".to_string(),
@@ -433,7 +437,7 @@ pub async fn get_system_health(
 /// Get cache statistics
 #[get("/cache/stats")]
 pub async fn get_cache_stats(
-    geo_ip_service: Option<web::Data<Option<crate::services::geoip::GeoIPService>>>,
+    geo_ip_service: Option<web::Data<Option<GeoIPService>>>,
     _http_req: HttpRequest,
 ) -> Result<HttpResponse, crate::error::AuthError> {
     let (cache_size, cache_enabled) = if let Some(geo_ip_data) = geo_ip_service.as_ref() {
@@ -477,7 +481,7 @@ pub async fn get_cache_stats(
 /// Clear cache
 #[post("/cache/clear")]
 pub async fn clear_cache(
-    geo_ip_service: Option<web::Data<Option<crate::services::geoip::GeoIPService>>>,
+    geo_ip_service: Option<web::Data<Option<GeoIPService>>>,
     _http_req: HttpRequest,
 ) -> Result<HttpResponse, crate::error::AuthError> {
     let cache_cleared = if let Some(geo_ip_data) = geo_ip_service.as_ref() {

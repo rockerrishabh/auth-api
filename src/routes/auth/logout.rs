@@ -1,6 +1,5 @@
-use crate::db::DbPool;
 use crate::middleware::extract_user_id_from_request;
-use crate::services::session::SessionService;
+use crate::{db::DbPool, services::core::session::SessionService};
 use actix_web::{post, web, HttpRequest, HttpResponse};
 use serde::Serialize;
 

@@ -1,4 +1,4 @@
-use crate::{db::DbPool, services::ActivityService};
+use crate::{db::DbPool, services::activity::ActivityService};
 use actix_web::{get, web, HttpRequest, HttpResponse};
 
 #[derive(Debug, serde::Serialize)]

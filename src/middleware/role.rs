@@ -7,8 +7,7 @@ use futures_util::future::{ready, LocalBoxFuture, Ready};
 use std::rc::Rc;
 use uuid::Uuid;
 
-use crate::db::DbPool;
-use crate::services::user::UserService;
+use crate::{db::DbPool, services::core::user::UserService};
 
 pub struct RoleMiddleware {
     required_role: String,

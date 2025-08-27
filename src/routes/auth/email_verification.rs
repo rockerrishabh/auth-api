@@ -2,7 +2,10 @@ use crate::{
     config::AppConfig,
     db::DbPool,
     error::AuthError,
-    services::{jwt::JwtService, UserService},
+    services::{
+        core::{auth::extract_ip_address, user::UserService},
+        utils::jwt::JwtService,
+    },
 };
 use actix_web::{get, web, HttpRequest, HttpResponse};
 use chrono::Utc;
@@ -81,7 +84,7 @@ pub async fn verify_email_link(
         user_id: user.id,
         activity_type: "email_verification".to_string(),
         description: "Email verified via registration link".to_string(),
-        ip_address: Some(crate::services::auth::extract_ip_address(&http_req)),
+        ip_address: Some(extract_ip_address(&http_req)),
         user_agent: http_req
             .headers()
             .get("user-agent")

@@ -1,6 +1,10 @@
 use crate::{
     db::DbPool,
-    services::{ActivityService, SessionService, UserService},
+    services::{
+        activity::ActivityService,
+        core::{session::SessionService, user::UserService},
+        utils::email::EmailService,
+    },
 };
 use actix_web::{get, web, HttpResponse};
 use serde_json::json;
@@ -230,7 +234,7 @@ pub async fn get_system_health(
     };
 
     // Test email service connection
-    let email_status = match crate::services::EmailService::new(config.email.clone()) {
+    let email_status = match EmailService::new(config.email.clone()) {
         Ok(email_service) => {
             // Test the SMTP connection by trying to send a test message or verify connection
             match email_service.test_connection().await {

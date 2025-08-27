@@ -1,7 +1,11 @@
+use crate::config::AppConfig;
 use crate::db::DbPool;
 use crate::middleware::extract_user_id_from_request;
-use crate::services::{user::UserService, PasswordService};
-use crate::AppConfig;
+use crate::services::{
+    core::password::PasswordChangeRequest,
+    core::password::PasswordService,
+    core::user::{UserResponse, UserService},
+};
 use actix_web::{get, put, web, HttpRequest, HttpResponse};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -26,7 +30,7 @@ pub struct ChangePasswordRequest {
 #[derive(Debug, Serialize)]
 pub struct ProfileResponse {
     pub message: String,
-    pub user: crate::services::user::UserResponse,
+    pub user: UserResponse,
 }
 
 #[get("/profile")]
@@ -125,7 +129,7 @@ pub async fn change_password(
             ))?;
 
     // Create a PasswordChangeRequest to use the validation method
-    let password_change_request = crate::services::password::PasswordChangeRequest {
+    let password_change_request = PasswordChangeRequest {
         current_password: req.current_password.clone(),
         new_password: req.new_password.clone(),
         confirm_password: req.new_password.clone(), // Use same password for confirmation

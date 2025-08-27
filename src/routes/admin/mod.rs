@@ -1,8 +1,14 @@
+// Admin routes modules
+pub mod audit;
+pub mod dashboard;
+pub mod session_management;
+pub mod system;
+pub mod users;
+
 use crate::config::AppConfig;
 use crate::db::DbPool;
 use crate::middleware::{extract_user_id_from_request, AuthMiddleware, RoleMiddleware};
-use crate::routes::auth::session_management;
-use crate::services::user::UserService;
+use crate::services::core::user::UserService;
 use actix_web::{delete, get, put, web, HttpRequest, HttpResponse};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -201,11 +207,6 @@ pub async fn delete_user(
         Err(crate::error::AuthError::UserNotFound)
     }
 }
-
-pub mod audit;
-pub mod dashboard;
-pub mod system;
-pub mod users;
 
 pub fn configure_admin_routes(
     cfg: &mut web::ServiceConfig,

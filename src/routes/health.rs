@@ -1,4 +1,9 @@
-use crate::{config::AppConfig, db::DbPool, error::AuthError};
+use crate::{
+    config::AppConfig,
+    db::DbPool,
+    error::AuthError,
+    services::utils::{email::EmailService, jwt::JwtService},
+};
 use actix_web::{get, web, HttpResponse};
 use serde_json::json;
 
@@ -17,7 +22,7 @@ pub async fn health_check(
     };
 
     // Test email service
-    let email_status = match crate::services::EmailService::new(config.email.clone()) {
+    let email_status = match EmailService::new(config.email.clone()) {
         Ok(_) => "healthy",
         Err(e) => {
             println!("Email service error: {}", e);
@@ -53,7 +58,7 @@ pub async fn detailed_health_check(
     };
 
     // Test email service
-    let email_status = match crate::services::EmailService::new(config.email.clone()) {
+    let email_status = match EmailService::new(config.email.clone()) {
         Ok(_) => "healthy",
         Err(e) => {
             println!("Email service error in detailed health: {}", e);
@@ -62,7 +67,7 @@ pub async fn detailed_health_check(
     };
 
     // Test JWT service
-    let jwt_status = match crate::services::jwt::JwtService::new(config.jwt.clone()) {
+    let jwt_status = match JwtService::new(config.jwt.clone()) {
         Ok(_) => "healthy",
         Err(e) => {
             println!("JWT service error in detailed health: {}", e);

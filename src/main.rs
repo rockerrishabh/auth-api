@@ -1,4 +1,5 @@
 use crate::middleware::logging::LoggingMiddleware;
+use crate::services::utils::geoip::GeoIPService;
 use actix_cors::Cors;
 use actix_web::http::header;
 use actix_web::middleware::Compress;
@@ -101,7 +102,7 @@ async fn main() -> std::io::Result<()> {
             config.geo_ip.timeout_seconds
         );
         Some(
-            crate::services::geoip::GeoIPService::new_with_timeout(
+            GeoIPService::new_with_timeout(
                 config.geo_ip.cache_enabled,
                 config.geo_ip.timeout_seconds,
             )

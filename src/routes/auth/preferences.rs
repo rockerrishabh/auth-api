@@ -1,4 +1,4 @@
-use crate::{db::DbPool, services::UserService};
+use crate::{db::DbPool, services::core::user::UserService};
 use actix_web::{get, put, web, HttpRequest, HttpResponse};
 use validator::Validate;
 

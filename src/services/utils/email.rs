@@ -166,7 +166,7 @@ impl EmailService {
         expiry_minutes: i32,
         ip_address: &str,
         user_agent: &str,
-        geo_ip_service: Option<&crate::services::geoip::GeoIPService>,
+        geo_ip_service: Option<&crate::services::utils::geoip::GeoIPService>,
     ) -> AuthResult<()> {
         let mut context = Context::new();
         context.insert("name", name);
@@ -301,7 +301,7 @@ impl EmailService {
         reason: &str,
         ip_address: &str,
         user_agent: &str,
-        geo_ip_service: Option<&crate::services::geoip::GeoIPService>,
+        geo_ip_service: Option<&crate::services::utils::geoip::GeoIPService>,
     ) -> AuthResult<()> {
         let mut context = Context::new();
         context.insert("name", name);
@@ -361,7 +361,7 @@ impl EmailService {
         code: &str,
         ip_address: &str,
         user_agent: &str,
-        geo_ip_service: Option<&crate::services::geoip::GeoIPService>,
+        geo_ip_service: Option<&crate::services::utils::geoip::GeoIPService>,
     ) -> AuthResult<()> {
         let mut context = Context::new();
         context.insert("name", name);

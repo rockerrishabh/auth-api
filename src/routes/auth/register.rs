@@ -1,10 +1,10 @@
 use crate::config::AppConfig;
 use crate::db::DbPool;
-use crate::services::auth::{AuthService, RegisterRequest};
-use crate::services::UserService;
-use crate::services::{
-    activity::ActivityService, email::EmailService, jwt::JwtService, session::SessionService,
-};
+use crate::services::core::auth::{AuthService, RegisterRequest};
+use crate::services::core::session::SessionService;
+use crate::services::core::user::UserService;
+use crate::services::utils::email::EmailService;
+use crate::services::{activity::ActivityService, utils::jwt::JwtService};
 use actix_web::{post, web, HttpResponse};
 use validator::Validate;
 

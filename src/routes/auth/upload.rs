@@ -1,7 +1,7 @@
 use crate::{
     db::DbPool,
     middleware::extract_user_id_from_request,
-    services::{FileUploadService, UserService},
+    services::{core::user::UserService, file_upload::file_upload::FileUploadService},
 };
 use actix_multipart::Multipart;
 use actix_web::{post, web, HttpRequest, HttpResponse};

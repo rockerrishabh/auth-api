@@ -1,97 +1,37 @@
+//! Image processing utilities
+
 use crate::{
     config::AppConfig,
     error::{AuthError, AuthResult},
 };
-use actix_multipart::Multipart;
-use futures_util::TryStreamExt;
 use image::{DynamicImage, GenericImageView, ImageFormat};
-
 use std::path::Path;
 use tokio::fs;
 use uuid::Uuid;
 
-#[derive(Debug, Clone)]
-pub struct ProcessedImage {
-    pub original_path: String,
-    pub thumbnail_path: String,
-    pub original_size: u64,
-    pub thumbnail_size: u64,
+/// Image processor for handling image operations
+pub struct ImageProcessor<'a> {
+    config: &'a AppConfig,
 }
 
-pub struct FileUploadService {
-    config: AppConfig,
-}
-
-impl FileUploadService {
-    pub fn new(config: AppConfig) -> Self {
+impl<'a> ImageProcessor<'a> {
+    pub fn new(config: &'a AppConfig) -> Self {
         Self { config }
     }
 
-    /// Process and save an uploaded avatar image
-    pub async fn process_avatar(&self, mut payload: Multipart) -> AuthResult<ProcessedImage> {
-        let mut image_data: Option<Vec<u8>> = None;
-
-        // Extract file data from multipart form
-        while let Some(mut field) = payload.try_next().await? {
-            if field.name() == Some("avatar") {
-                let content_type = field.content_type().map(|m| m.to_string());
-
-                // Validate content type
-                if !self.is_valid_image_type(content_type.as_deref()) {
-                    return Err(AuthError::ValidationFailed(
-                        "Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.".to_string(),
-                    ));
-                }
-
-                // Read file data
-                let mut data = Vec::new();
-                while let Some(chunk) = field.try_next().await? {
-                    data.extend_from_slice(&chunk);
-                }
-
-                // Validate file size
-                if data.len() > self.config.upload.max_size as usize {
-                    return Err(AuthError::ValidationFailed(format!(
-                        "File too large. Maximum size is {} bytes.",
-                        self.config.upload.max_size
-                    )));
-                }
-
-                // Extract filename from content disposition for validation
-                if let Some(content_disposition) = field.content_disposition() {
-                    if let Some(fname) = content_disposition.get_filename() {
-                        // Validate filename
-                        self.validate_filename(fname)?;
-                    }
-                }
-
-                image_data = Some(data);
-                break;
-            }
-        }
-
-        let image_data = image_data
-            .ok_or_else(|| AuthError::ValidationFailed("No avatar file provided".to_string()))?;
-
-        // Generate unique filename
-        let file_extension = self.get_file_extension(&image_data)?;
+    /// Generate unique filename with proper extension
+    pub fn generate_filename(&self, image_data: &[u8]) -> AuthResult<String> {
+        let file_extension = self.get_file_extension(image_data)?;
         let file_id = Uuid::new_v4();
-        let filename = format!("{}.{}", file_id, file_extension);
-
-        // Process and save images
-        let processed_image = self
-            .save_image_with_thumbnail(&filename, &image_data)
-            .await?;
-
-        Ok(processed_image)
+        Ok(format!("{}.{}", file_id, file_extension))
     }
 
-    /// Save original image and create thumbnail
-    async fn save_image_with_thumbnail(
+    /// Process and save image with optional thumbnail
+    pub async fn process_and_save_image(
         &self,
         filename: &str,
         image_data: &[u8],
-    ) -> AuthResult<ProcessedImage> {
+    ) -> AuthResult<super::types::ProcessedImage> {
         // Load and process image
         let img = image::load_from_memory(image_data)
             .map_err(|e| AuthError::InternalError(format!("Failed to load image: {}", e)))?;
@@ -106,7 +46,7 @@ impl FileUploadService {
         // Save original image (resized if too large)
         let original_path = format!("{}/{}", self.config.upload.dir, filename);
         let processed_img = self.resize_image_if_needed(img.clone())?;
-        self.save_image(&original_path, &processed_img, &filename)?;
+        self.save_image(&original_path, &processed_img, filename)?;
 
         // Create and save thumbnail if enabled in configuration
         let (thumbnail_filename, _thumbnail_path, thumbnail_size) =
@@ -142,7 +82,7 @@ impl FileUploadService {
             .map_err(|e| AuthError::InternalError(format!("Failed to get file metadata: {}", e)))?
             .len();
 
-        Ok(ProcessedImage {
+        Ok(super::types::ProcessedImage {
             original_path: format!("/static/{}", filename),
             thumbnail_path: if thumbnail_filename.is_empty() {
                 "".to_string()
@@ -155,7 +95,7 @@ impl FileUploadService {
     }
 
     /// Resize image if it exceeds maximum dimensions
-    fn resize_image_if_needed(&self, img: DynamicImage) -> AuthResult<DynamicImage> {
+    pub fn resize_image_if_needed(&self, img: DynamicImage) -> AuthResult<DynamicImage> {
         let (width, height) = img.dimensions();
 
         if width > self.config.upload.image_max_width
@@ -175,7 +115,7 @@ impl FileUploadService {
     }
 
     /// Create thumbnail from image
-    fn create_thumbnail(&self, img: DynamicImage) -> AuthResult<DynamicImage> {
+    pub fn create_thumbnail(&self, img: DynamicImage) -> AuthResult<DynamicImage> {
         let (width, height) = img.dimensions();
         let size = self.config.upload.thumbnail_size;
 
@@ -193,7 +133,7 @@ impl FileUploadService {
     }
 
     /// Save image with appropriate format
-    fn save_image(&self, path: &str, img: &DynamicImage, filename: &str) -> AuthResult<()> {
+    pub fn save_image(&self, path: &str, img: &DynamicImage, filename: &str) -> AuthResult<()> {
         let extension = self.get_file_extension_from_filename(filename)?;
 
         match extension.as_str() {
@@ -224,7 +164,7 @@ impl FileUploadService {
     }
 
     /// Save image as JPEG with custom quality
-    fn save_image_as_jpeg_with_quality(
+    pub fn save_image_as_jpeg_with_quality(
         &self,
         path: &str,
         img: &DynamicImage,
@@ -247,7 +187,7 @@ impl FileUploadService {
     }
 
     /// Save image as WebP format
-    fn save_image_as_webp(&self, path: &str, img: &DynamicImage) -> AuthResult<()> {
+    pub fn save_image_as_webp(&self, path: &str, img: &DynamicImage) -> AuthResult<()> {
         let mut file = std::fs::File::create(path)
             .map_err(|e| AuthError::InternalError(format!("Failed to create file: {}", e)))?;
 
@@ -258,7 +198,7 @@ impl FileUploadService {
     }
 
     /// Save image as AVIF format (fallback to WebP if AVIF fails)
-    fn save_image_as_avif(&self, path: &str, img: &DynamicImage) -> AuthResult<()> {
+    pub fn save_image_as_avif(&self, path: &str, img: &DynamicImage) -> AuthResult<()> {
         // Feature flag for AVIF encoding - can be enabled when ravif crate is available
         #[cfg(feature = "avif-encoding")]
         {
@@ -305,23 +245,8 @@ impl FileUploadService {
         }
     }
 
-    /// Check if content type is a valid image type
-    fn is_valid_image_type(&self, content_type: Option<&str>) -> bool {
-        if let Some(ct) = content_type {
-            // Check if the content type is in the allowed types configuration
-            let content_type_without_prefix = ct.strip_prefix("image/").unwrap_or(ct);
-
-            self.config
-                .upload
-                .allowed_types
-                .contains(&content_type_without_prefix.to_string())
-        } else {
-            false
-        }
-    }
-
     /// Get file extension from image data
-    fn get_file_extension(&self, data: &[u8]) -> AuthResult<String> {
+    pub fn get_file_extension(&self, data: &[u8]) -> AuthResult<String> {
         match image::guess_format(data) {
             Ok(ImageFormat::Jpeg) => Ok("jpg".to_string()),
             Ok(ImageFormat::Png) => Ok("png".to_string()),
@@ -342,80 +267,11 @@ impl FileUploadService {
     }
 
     /// Get file extension from filename
-    fn get_file_extension_from_filename(&self, filename: &str) -> AuthResult<String> {
+    pub fn get_file_extension_from_filename(&self, filename: &str) -> AuthResult<String> {
         Path::new(filename)
             .extension()
             .and_then(|ext| ext.to_str())
             .map(|ext| ext.to_lowercase())
             .ok_or_else(|| AuthError::ValidationFailed("Invalid filename".to_string()))
-    }
-
-    /// Validate filename from content disposition
-    fn validate_filename(&self, filename: &str) -> AuthResult<()> {
-        // Check filename length
-        if filename.is_empty() || filename.len() > 255 {
-            return Err(AuthError::ValidationFailed(
-                "Filename is too long or empty".to_string(),
-            ));
-        }
-
-        // Check for path traversal attempts
-        if filename.contains("..") || filename.contains("/") || filename.contains("\\") {
-            return Err(AuthError::ValidationFailed(
-                "Invalid filename: path traversal not allowed".to_string(),
-            ));
-        }
-
-        // Check for suspicious characters
-        let suspicious_chars = ['<', '>', ':', '"', '|', '?', '*'];
-        if filename.chars().any(|c| suspicious_chars.contains(&c)) {
-            return Err(AuthError::ValidationFailed(
-                "Invalid filename: contains suspicious characters".to_string(),
-            ));
-        }
-
-        // Check for hidden files
-        if filename.starts_with('.') {
-            return Err(AuthError::ValidationFailed(
-                "Invalid filename: hidden files not allowed".to_string(),
-            ));
-        }
-
-        Ok(())
-    }
-
-    /// Delete old avatar files
-    pub async fn delete_old_avatars(
-        &self,
-        avatar_path: &str,
-        thumbnail_path: &str,
-    ) -> AuthResult<()> {
-        if !avatar_path.is_empty() {
-            let full_path = format!(
-                "{}/{}",
-                self.config.upload.dir,
-                avatar_path.trim_start_matches("/static/")
-            );
-            if fs::metadata(&full_path).await.is_ok() {
-                fs::remove_file(&full_path).await.map_err(|e| {
-                    AuthError::InternalError(format!("Failed to delete old avatar: {}", e))
-                })?;
-            }
-        }
-
-        if !thumbnail_path.is_empty() {
-            let full_path = format!(
-                "{}/{}",
-                self.config.upload.dir,
-                thumbnail_path.trim_start_matches("/static/")
-            );
-            if fs::metadata(&full_path).await.is_ok() {
-                fs::remove_file(&full_path).await.map_err(|e| {
-                    AuthError::InternalError(format!("Failed to delete old thumbnail: {}", e))
-                })?;
-            }
-        }
-
-        Ok(())
     }
 }
