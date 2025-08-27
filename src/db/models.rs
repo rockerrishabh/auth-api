@@ -9,7 +9,7 @@ use crate::db::schemas::*;
 use crate::services::core::user::UserResponse;
 
 // Enum definitions using diesel_derive_enum v3
-#[derive(Debug, Clone, Serialize, Deserialize, DbEnum)]
+#[derive(Debug, Clone, Serialize, Deserialize, DbEnum, PartialEq)]
 #[db_enum(existing_type_path = "crate::db::schemas::sql_types::UserRole")]
 #[serde(rename_all = "lowercase")]
 pub enum UserRole {
@@ -236,7 +236,7 @@ pub struct UserRoleDefinition {
 #[derive(Debug, Clone, Serialize, Deserialize, Insertable)]
 #[diesel(table_name = user_roles)]
 pub struct NewUserRoleDefinition {
-    pub name: String,
+    pub name: UserRole,
     pub description: Option<String>,
     pub permissions: Json<serde_json::Value>,
     pub is_default: bool,
