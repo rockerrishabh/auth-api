@@ -20,6 +20,7 @@ pub struct UpdateSystemConfigRequest {
     pub registration_enabled: Option<bool>,
     pub email_verification_required: Option<bool>,
     pub two_factor_required: Option<bool>,
+    pub two_factor_required_roles: Option<Vec<String>>,
     pub max_login_attempts: Option<u32>,
     pub session_timeout_minutes: Option<u64>,
 }
@@ -40,6 +41,7 @@ pub struct SystemConfigInfo {
     pub registration_enabled: bool,
     pub email_verification_required: bool,
     pub two_factor_required: bool,
+    pub two_factor_required_roles: Vec<String>,
     pub max_login_attempts: u32,
     pub session_timeout_minutes: u64,
     pub database_status: String,
@@ -116,6 +118,7 @@ pub async fn get_system_config(
         registration_enabled,
         email_verification_required,
         two_factor_required,
+        two_factor_required_roles: config.two_factor_required_roles.clone(),
         max_login_attempts,
         session_timeout_minutes,
         database_status: db_status.to_string(),
@@ -213,6 +216,9 @@ pub async fn update_system_config(
             .await?;
     }
 
+    // Note: two_factor_required_roles is configured via environment variable APP_TWO_FACTOR__REQUIRED_ROLES
+    // for security reasons - this setting requires server restart to take effect
+
     // Implement dynamic settings for complex security features
     if let Some(max_login_attempts) = req.max_login_attempts {
         system_service
@@ -275,6 +281,10 @@ pub async fn update_system_config(
         registration_enabled,
         email_verification_required,
         two_factor_required,
+        two_factor_required_roles: req
+            .two_factor_required_roles
+            .clone()
+            .unwrap_or_else(|| config.two_factor_required_roles.clone()),
         max_login_attempts: req
             .max_login_attempts
             .unwrap_or(config.security.max_failed_attempts),
@@ -317,6 +327,7 @@ pub async fn initialize_system_settings(
             registration_enabled: true,
             email_verification_required: true,
             two_factor_required: false,
+            two_factor_required_roles: vec!["admin".to_string(), "superadmin".to_string()],
             max_login_attempts: 5,
             session_timeout_minutes: 1440,
             database_status: "unknown".to_string(),

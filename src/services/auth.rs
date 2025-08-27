@@ -227,8 +227,18 @@ impl AuthService {
             return Err(AuthError::InvalidCredentials);
         }
 
-        // Check if user has 2FA enabled
-        if user.two_factor_enabled {
+        // Check if 2FA is required for user's role or if user has 2FA enabled
+        let user_role = format!("{:?}", user.role).to_lowercase();
+        let is_two_factor_required = self.config.is_two_factor_required_for_role(&user_role);
+
+        // If 2FA is required for this role but not enabled, return error
+        if is_two_factor_required && !user.two_factor_enabled {
+            return Err(AuthError::ValidationFailed(
+                "Two-factor authentication is required for your account role. Please enable 2FA first.".to_string()
+            ));
+        }
+
+        if user.two_factor_enabled || is_two_factor_required {
             // Extract request information for the email
             let ip_address = extract_ip_address(http_req);
             let user_agent = extract_user_agent(http_req);

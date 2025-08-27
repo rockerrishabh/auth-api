@@ -164,7 +164,10 @@ APP_EMAIL__FROM_NAME=Your App Name
 ```bash
 APP_SECURITY__MAX_FAILED_ATTEMPTS=5
 APP_SECURITY__SESSION_TIMEOUT=86400
+APP_TWO_FACTOR__REQUIRED_ROLES=admin,superadmin
 ```
+
+**Note:** `APP_TWO_FACTOR__REQUIRED_ROLES` is a comma-separated list of user roles that require 2FA. Users with these roles must enable 2FA before they can log in. This provides an additional security layer for sensitive accounts.
 
 #### File Upload Configuration
 
@@ -557,7 +560,8 @@ diesel print-schema
 ### Account Security
 
 - **Account Lockout** after failed attempts
-- **Two-Factor Authentication**
+- **Two-Factor Authentication** with role-based requirements
+- **Role-Based 2FA Enforcement** (admin, superadmin)
 - **Email Verification** required
 - **Session Management** with expiration
 - **Audit Logging** for compliance
@@ -579,6 +583,7 @@ diesel print-schema
 - [ ] Set up SMTP server for email functionality
 - [ ] Configure proper CORS origins
 - [ ] Enable HTTPS in production
+- [ ] Configure 2FA role requirements (`APP_TWO_FACTOR__REQUIRED_ROLES`)
 - [ ] Set up log aggregation
 - [ ] Configure monitoring and alerts
 - [ ] Set up database backups

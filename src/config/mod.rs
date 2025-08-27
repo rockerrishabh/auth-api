@@ -82,6 +82,7 @@ pub struct AppConfig {
     pub security: SecurityConfig,
     pub upload: UploadConfig,
     pub frontend_url: String,
+    pub two_factor_required_roles: Vec<String>,
 }
 
 impl AppConfig {
@@ -249,6 +250,12 @@ impl AppConfig {
                     "webp".to_string(),
                 ],
             },
+            two_factor_required_roles: std::env::var("APP_TWO_FACTOR__REQUIRED_ROLES")
+                .unwrap_or_else(|_| "admin,superadmin".to_string())
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
         })
     }
 
@@ -258,6 +265,13 @@ impl AppConfig {
 
     pub fn is_development(&self) -> bool {
         self.environment == "development"
+    }
+
+    /// Check if 2FA is required for a specific role
+    pub fn is_two_factor_required_for_role(&self, role: &str) -> bool {
+        self.two_factor_required_roles
+            .iter()
+            .any(|required_role| required_role.eq_ignore_ascii_case(role))
     }
 }
 
@@ -313,6 +327,7 @@ impl Default for AppConfig {
                 ],
             },
             frontend_url: "http://localhost:3000".to_string(),
+            two_factor_required_roles: vec!["admin".to_string(), "superadmin".to_string()],
         }
     }
 }
