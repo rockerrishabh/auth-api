@@ -555,6 +555,19 @@ pub async fn get_system_monitoring(
     Ok(HttpResponse::Ok().json(monitoring_data))
 }
 
+/// Get system metrics
+#[get("/metrics")]
+pub async fn get_system_metrics(
+    pool: web::Data<DbPool>,
+) -> Result<HttpResponse, crate::error::AuthError> {
+    let system_service = SystemService::new(pool.get_ref().clone());
+
+    // Get system metrics
+    let metrics = system_service.get_system_health_metrics().await?;
+
+    Ok(HttpResponse::Ok().json(metrics))
+}
+
 /// Get cache statistics
 #[get("/cache/stats")]
 pub async fn get_cache_stats(

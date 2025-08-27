@@ -22,15 +22,6 @@ pub struct UserSearchRequest {
     pub sort_order: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
-pub struct BulkUserUpdateRequest {
-    pub user_ids: Vec<uuid::Uuid>,
-    pub role: Option<String>,
-    pub status: Option<String>,
-    pub email_verified: Option<bool>,
-    pub two_factor_enabled: Option<bool>,
-}
-
 #[derive(Debug, Serialize)]
 pub struct UserSearchResponse {
     pub users: Vec<UserResponse>,
@@ -50,6 +41,16 @@ pub struct BulkUpdateResponse {
     pub updated_count: i64,
     pub failed_updates: Vec<String>,
     pub update_details: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct BulkUpdateUsersRequest {
+    #[validate(length(min = 1))]
+    pub user_ids: Vec<String>,
+    pub role: Option<String>,
+    pub status: Option<String>,
+    pub email_verified: Option<bool>,
+    pub two_factor_enabled: Option<bool>,
 }
 
 /// Search and filter users with advanced options
@@ -126,11 +127,11 @@ pub async fn search_users(
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// Bulk update user roles and statuses
-#[put("/bulk-update")]
+/// Bulk update users
+#[post("/bulk-update")]
 pub async fn bulk_update_users(
     pool: web::Data<DbPool>,
-    req: web::Json<BulkUserUpdateRequest>,
+    req: web::Json<BulkUpdateUsersRequest>,
     _http_req: actix_web::HttpRequest,
 ) -> Result<HttpResponse, crate::error::AuthError> {
     // Validate request
@@ -148,13 +149,16 @@ pub async fn bulk_update_users(
 
         // Update role if provided
         if let Some(role_str) = &req.role {
-            match user_service.update_user_role(*user_id, role_str).await {
+            match user_service
+                .update_user_role(user_id.parse()?, role_str)
+                .await
+            {
                 Ok(_) => {
                     user_updated = true;
                     update_details.push(format!("Role updated to {}", role_str));
                 }
                 Err(e) => {
-                    failed_updates.push((*user_id, format!("Role update failed: {}", e)));
+                    failed_updates.push((user_id.clone(), format!("Role update failed: {}", e)));
                     continue;
                 }
             }
@@ -162,13 +166,16 @@ pub async fn bulk_update_users(
 
         // Update status if provided
         if let Some(status_str) = &req.status {
-            match user_service.update_user_status(*user_id, status_str).await {
+            match user_service
+                .update_user_status(user_id.parse()?, status_str)
+                .await
+            {
                 Ok(_) => {
                     user_updated = true;
                     update_details.push(format!("Status updated to {}", status_str));
                 }
                 Err(e) => {
-                    failed_updates.push((*user_id, format!("Status update failed: {}", e)));
+                    failed_updates.push((user_id.clone(), format!("Status update failed: {}", e)));
                     continue;
                 }
             }
@@ -178,7 +185,7 @@ pub async fn bulk_update_users(
         if let Some(verified) = req.email_verified {
             let verification_time = if verified { Some(Utc::now()) } else { None };
             match user_service
-                .update_user_verification(*user_id, verification_time, None)
+                .update_user_verification(user_id.parse()?, verification_time, None)
                 .await
             {
                 Ok(_) => {
@@ -186,8 +193,10 @@ pub async fn bulk_update_users(
                     update_details.push(format!("Email verification set to {}", verified));
                 }
                 Err(e) => {
-                    failed_updates
-                        .push((*user_id, format!("Email verification update failed: {}", e)));
+                    failed_updates.push((
+                        user_id.clone(),
+                        format!("Email verification update failed: {}", e),
+                    ));
                     continue;
                 }
             }
@@ -201,7 +210,7 @@ pub async fn bulk_update_users(
                 None
             };
             match user_service
-                .update_user_two_factor(*user_id, enabled, secret)
+                .update_user_two_factor(user_id.parse()?, enabled, secret)
                 .await
             {
                 Ok(_) => {
@@ -209,7 +218,7 @@ pub async fn bulk_update_users(
                     update_details.push(format!("2FA status set to {}", enabled));
                 }
                 Err(e) => {
-                    failed_updates.push((*user_id, format!("2FA update failed: {}", e)));
+                    failed_updates.push((user_id.clone(), format!("2FA update failed: {}", e)));
                     continue;
                 }
             }

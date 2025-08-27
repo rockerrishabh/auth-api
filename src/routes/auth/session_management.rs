@@ -5,6 +5,7 @@ use crate::{
     services::core::{session::SessionService, user::UserService},
 };
 use actix_web::{delete, get, web, HttpRequest, HttpResponse};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
@@ -24,6 +25,19 @@ pub struct CreateSessionRequest {
 pub struct SessionManagementResponse {
     pub message: String,
     pub success: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SecurityAlert {
+    pub id: String,
+    pub type_: String,
+    pub severity: String,
+    pub message: String,
+    pub details: String,
+    pub ip_address: Option<String>,
+    pub user_agent: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub resolved: bool,
 }
 
 #[get("/current")]
@@ -192,5 +206,82 @@ pub async fn get_session_statistics(
         "total_sessions": total_sessions,
         "active_sessions": active_sessions,
         "success": true
+    })))
+}
+
+/// Get security alerts for the current user
+#[get("/security-alerts")]
+pub async fn get_security_alerts(
+    pool: web::Data<DbPool>,
+    http_req: HttpRequest,
+) -> AuthResult<HttpResponse> {
+    let current_user_id = extract_user_id_from_request(&http_req)
+        .map_err(|_| crate::error::AuthError::InvalidToken)?;
+
+    let session_service = SessionService::new(pool.get_ref().clone());
+
+    // Get user's sessions to analyze for security concerns
+    let user_sessions = session_service
+        .get_user_sessions(current_user_id, 1, 50)
+        .await?;
+
+    let mut security_alerts: Vec<SecurityAlert> = Vec::new();
+    let now = Utc::now();
+
+    // Analyze sessions for potential security issues
+    for session in &user_sessions {
+        // Check for expired sessions that are still marked as active
+        if session.is_active && session.expires_at < now {
+            security_alerts.push(SecurityAlert {
+                id: format!("expired-{}", session.id),
+                type_: "expired_session".to_string(),
+                severity: "medium".to_string(),
+                message: "Expired session still marked as active".to_string(),
+                details: "Session has expired but is still considered active".to_string(),
+                ip_address: session.ip_address.clone(),
+                user_agent: session.user_agent.clone(),
+                created_at: session.created_at,
+                resolved: false,
+            });
+        }
+
+        // Check for sessions from unusual locations (simplified check)
+        if let Some(ip) = &session.ip_address {
+            if ip.starts_with("192.168.") || ip.starts_with("10.") || ip.starts_with("172.") {
+                // This is a local/private IP, which might be suspicious for external access
+                security_alerts.push(SecurityAlert {
+                    id: format!("local-ip-{}", session.id),
+                    type_: "suspicious_location".to_string(),
+                    severity: "low".to_string(),
+                    message: "Session from local/private IP address".to_string(),
+                    details: "Session appears to be from a local network".to_string(),
+                    ip_address: Some(ip.clone()),
+                    user_agent: session.user_agent.clone(),
+                    created_at: session.created_at,
+                    resolved: false,
+                });
+            }
+        }
+    }
+
+    // Add a general security status alert
+    if security_alerts.is_empty() {
+        security_alerts.push(SecurityAlert {
+            id: "status-ok".to_string(),
+            type_: "security_status".to_string(),
+            severity: "low".to_string(),
+            message: "All sessions appear secure".to_string(),
+            details: "No security concerns detected in current sessions".to_string(),
+            ip_address: None,
+            user_agent: None,
+            created_at: now,
+            resolved: true,
+        });
+    }
+
+    Ok(HttpResponse::Ok().json(json!({
+        "alerts": security_alerts,
+        "success": true,
+        "total_alerts": security_alerts.len()
     })))
 }
