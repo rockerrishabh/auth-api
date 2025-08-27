@@ -1,3 +1,4 @@
+use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
@@ -404,4 +405,225 @@ pub struct NewSystemSetting<'a> {
     pub setting_value: &'a str,
     pub setting_type: &'a str,
     pub description: Option<&'a str>,
+}
+
+// Performance Monitoring Models
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Identifiable)]
+#[diesel(table_name = performance_issues, check_for_backend(diesel::pg::Pg))]
+pub struct PerformanceIssue {
+    pub id: Uuid,
+    pub issue_type: String,
+    pub severity: String,
+    pub title: String,
+    pub description: String,
+    pub impact: String,
+    pub recommendation: String,
+    pub estimated_savings: String,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Insertable)]
+#[diesel(table_name = performance_issues, check_for_backend(diesel::pg::Pg))]
+pub struct NewPerformanceIssue {
+    pub issue_type: String,
+    pub severity: String,
+    pub title: String,
+    pub description: String,
+    pub impact: String,
+    pub recommendation: String,
+    pub estimated_savings: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Identifiable)]
+#[diesel(table_name = bundle_analyses, check_for_backend(diesel::pg::Pg))]
+pub struct BundleAnalysis {
+    pub id: Uuid,
+    pub total_size_bytes: i64,
+    pub gzipped_size_bytes: i64,
+    pub chunks: i32,
+    pub largest_chunks: Json<Vec<BundleChunk>>,
+    pub unused_dependencies: Json<Vec<String>>,
+    pub optimization_opportunities: Json<Vec<String>>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Insertable)]
+#[diesel(table_name = bundle_analyses, check_for_backend(diesel::pg::Pg))]
+pub struct NewBundleAnalysis {
+    pub total_size_bytes: i64,
+    pub gzipped_size_bytes: i64,
+    pub chunks: i32,
+    pub largest_chunks: Json<Vec<BundleChunk>>,
+    pub unused_dependencies: Json<Vec<String>>,
+    pub optimization_opportunities: Json<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BundleChunk {
+    pub name: String,
+    pub size_bytes: i64,
+    pub percentage: BigDecimal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Identifiable, Selectable)]
+#[diesel(table_name = render_metrics, check_for_backend(diesel::pg::Pg))]
+pub struct RenderMetrics {
+    pub id: Uuid,
+    pub component_name: String,
+    pub render_count: i32,
+    pub average_render_time_ms: i64,
+    pub last_render_time_ms: i64,
+    pub memory_usage_mb: BigDecimal,
+    pub optimization_score: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Insertable)]
+#[diesel(table_name = render_metrics, check_for_backend(diesel::pg::Pg))]
+pub struct NewRenderMetrics {
+    pub component_name: String,
+    pub render_count: i32,
+    pub average_render_time_ms: i64,
+    pub last_render_time_ms: i64,
+    pub memory_usage_mb: BigDecimal,
+    pub optimization_score: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Identifiable)]
+#[diesel(table_name = system_metrics, check_for_backend(diesel::pg::Pg))]
+pub struct SystemMetrics {
+    pub id: Uuid,
+    pub cpu_usage: BigDecimal,
+    pub memory_usage: BigDecimal,
+    pub disk_usage: BigDecimal,
+    pub network_usage: BigDecimal,
+    pub response_time_ms: i64,
+    pub uptime_seconds: i64,
+    pub active_users: i32,
+    pub error_rate: BigDecimal,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Insertable)]
+#[diesel(table_name = system_metrics, check_for_backend(diesel::pg::Pg))]
+pub struct NewSystemMetrics {
+    pub cpu_usage: BigDecimal,
+    pub memory_usage: BigDecimal,
+    pub disk_usage: BigDecimal,
+    pub network_usage: BigDecimal,
+    pub response_time_ms: i64,
+    pub uptime_seconds: i64,
+    pub active_users: i32,
+    pub error_rate: BigDecimal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Identifiable)]
+#[diesel(table_name = service_health, check_for_backend(diesel::pg::Pg))]
+pub struct ServiceHealth {
+    pub id: Uuid,
+    pub service_name: String,
+    pub status: String,
+    pub response_time_ms: i64,
+    pub last_check: DateTime<Utc>,
+    pub endpoint: String,
+    pub error_message: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Insertable)]
+#[diesel(table_name = service_health, check_for_backend(diesel::pg::Pg))]
+pub struct NewServiceHealth {
+    pub service_name: String,
+    pub status: String,
+    pub response_time_ms: i64,
+    pub last_check: DateTime<Utc>,
+    pub endpoint: String,
+    pub error_message: Option<String>,
+}
+
+// Testing Models
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Identifiable)]
+#[diesel(table_name = test_suites, check_for_backend(diesel::pg::Pg))]
+pub struct TestSuite {
+    pub id: Uuid,
+    pub name: String,
+    pub total_tests: i32,
+    pub passed_tests: i32,
+    pub failed_tests: i32,
+    pub running_tests: i32,
+    pub duration_ms: i64,
+    pub last_run: DateTime<Utc>,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Insertable)]
+#[diesel(table_name = test_suites, check_for_backend(diesel::pg::Pg))]
+pub struct NewTestSuite {
+    pub name: String,
+    pub total_tests: i32,
+    pub passed_tests: i32,
+    pub failed_tests: i32,
+    pub running_tests: i32,
+    pub duration_ms: i64,
+    pub last_run: DateTime<Utc>,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Identifiable)]
+#[diesel(table_name = test_results, check_for_backend(diesel::pg::Pg))]
+pub struct TestResult {
+    pub id: Uuid,
+    pub test_suite_id: Uuid,
+    pub name: String,
+    pub status: String,
+    pub duration_ms: i64,
+    pub timestamp: DateTime<Utc>,
+    pub error: Option<String>,
+    pub category: String,
+    pub priority: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Insertable)]
+#[diesel(table_name = test_results, check_for_backend(diesel::pg::Pg))]
+pub struct NewTestResult {
+    pub test_suite_id: Uuid,
+    pub name: String,
+    pub status: String,
+    pub duration_ms: i64,
+    pub timestamp: DateTime<Utc>,
+    pub error: Option<String>,
+    pub category: String,
+    pub priority: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Identifiable)]
+#[diesel(table_name = test_performance_metrics, check_for_backend(diesel::pg::Pg))]
+pub struct TestPerformanceMetrics {
+    pub id: Uuid,
+    pub response_time_ms: i64,
+    pub throughput_rps: i64,
+    pub error_rate_percent: BigDecimal,
+    pub cpu_usage_percent: BigDecimal,
+    pub memory_usage_percent: BigDecimal,
+    pub active_connections: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Insertable)]
+#[diesel(table_name = test_performance_metrics, check_for_backend(diesel::pg::Pg))]
+pub struct NewTestPerformanceMetrics {
+    pub response_time_ms: i64,
+    pub throughput_rps: i64,
+    pub error_rate_percent: BigDecimal,
+    pub cpu_usage_percent: BigDecimal,
+    pub memory_usage_percent: BigDecimal,
+    pub active_connections: i64,
 }

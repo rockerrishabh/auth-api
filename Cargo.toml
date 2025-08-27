@@ -10,7 +10,7 @@ actix-multipart = "0.7.2"
 actix-web = { version = "4.11.0", features = ["openssl"] }
 argon2 = "0.5.3"
 chrono = { version = "0.4.41", features = ["serde"] }
-diesel = { version = "2.2.12", features = ["chrono", "postgres", "r2d2", "uuid"] }
+diesel = { version = "2.2.12", features = ["chrono", "numeric", "postgres", "r2d2", "uuid"] }
 diesel_migrations = "2.2.0"
 jsonwebtoken = "9.3.0"
 rand = "0.8.5"
@@ -35,6 +35,8 @@ diesel_json = "0.2.1"
 tera = "1.20.0"
 tracing-subscriber = "0.3.19"
 tracing = "0.1.41"
+bigdecimal = { version = "0.4.8", features = ["serde"] }
+sysinfo = "0.31.0"
 
 [features]
 default = ["avif-encoding"]

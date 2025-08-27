@@ -1,8 +1,10 @@
 // Admin routes modules
 pub mod audit;
 pub mod dashboard;
+pub mod performance;
 pub mod session_management;
 pub mod system;
+pub mod testing;
 pub mod users;
 
 use crate::config::AppConfig;
@@ -257,9 +259,26 @@ pub fn configure_admin_routes(
                     .service(system::initialize_system_settings)
                     .service(system::get_all_system_settings)
                     .service(system::get_system_health)
+                    .service(system::get_system_monitoring)
                     .service(system::get_cache_stats)
                     .service(system::clear_cache)
                     .app_data(web::Data::new(config)),
+            )
+            .service(
+                web::scope("/performance")
+                    .service(performance::get_performance_issues)
+                    .service(performance::get_bundle_analysis)
+                    .service(performance::get_render_metrics)
+                    .service(performance::run_performance_analysis)
+                    .service(performance::get_realtime_metrics),
+            )
+            .service(
+                web::scope("/testing")
+                    .service(testing::get_test_suites)
+                    .service(testing::get_test_results)
+                    .service(testing::get_performance_metrics)
+                    .service(testing::run_test_suite)
+                    .service(testing::get_test_types),
             ),
     );
 }

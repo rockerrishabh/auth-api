@@ -8,6 +8,7 @@ use crate::{
     },
 };
 use actix_web::{get, post, put, web, HttpRequest, HttpResponse};
+use chrono::Utc;
 use serde::Serialize;
 use std::collections::HashMap;
 use validator::Validate;
@@ -314,30 +315,68 @@ pub async fn update_system_config(
 #[post("/initialize")]
 pub async fn initialize_system_settings(
     pool: web::Data<DbPool>,
+    config: web::Data<AppConfig>,
 ) -> Result<HttpResponse, crate::error::AuthError> {
     let system_service = SystemService::new(pool.get_ref().clone());
 
     // Initialize default settings
     system_service.initialize_defaults().await?;
 
+    // Get the actual initialized settings from database
+    let app_name = system_service
+        .get_string_setting("app_name", "Advanced Authentication System")
+        .await?;
+    let app_description = system_service
+        .get_string_setting("app_description", "Advanced Authentication System")
+        .await?;
+    let maintenance_mode = system_service
+        .get_bool_setting("maintenance_mode", false)
+        .await?;
+    let registration_enabled = system_service
+        .get_bool_setting("registration_enabled", true)
+        .await?;
+    let email_verification_required = system_service
+        .get_bool_setting("email_verification_required", true)
+        .await?;
+    let two_factor_required = system_service
+        .get_bool_setting("two_factor_required", false)
+        .await?;
+
+    // Test database connection
+    let db_status = match pool.get() {
+        Ok(_) => "healthy",
+        Err(_) => "unhealthy",
+    };
+
+    // Test email service connection
+    let email_status = match EmailService::new(config.email.clone()) {
+        Ok(_) => "healthy",
+        Err(_) => "unhealthy",
+    };
+
+    let system_config = SystemConfigInfo {
+        app_name,
+        app_description,
+        environment: config.environment.clone(),
+        maintenance_mode,
+        registration_enabled,
+        email_verification_required,
+        two_factor_required,
+        two_factor_required_roles: config.two_factor_required_roles.clone(),
+        max_login_attempts: config.security.max_failed_attempts,
+        session_timeout_minutes: config.security.session_timeout / 60,
+        database_status: db_status.to_string(),
+        email_service_status: email_status.to_string(),
+        uptime_seconds: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    };
+
     Ok(HttpResponse::Ok().json(SystemConfigResponse {
         message: "System settings initialized successfully".to_string(),
         success: true,
-        config: SystemConfigInfo {
-            app_name: "Advanced Authentication System".to_string(),
-            app_description: "Advanced Authentication System".to_string(),
-            environment: "development".to_string(),
-            maintenance_mode: false,
-            registration_enabled: true,
-            email_verification_required: true,
-            two_factor_required: false,
-            two_factor_required_roles: vec!["admin".to_string(), "super_admin".to_string()],
-            max_login_attempts: 5,
-            session_timeout_minutes: 1440,
-            database_status: "unknown".to_string(),
-            email_service_status: "unknown".to_string(),
-            uptime_seconds: 0,
-        },
+        config: system_config,
     }))
 }
 
@@ -373,6 +412,17 @@ pub async fn get_system_health(
     pool: web::Data<DbPool>,
     config: web::Data<AppConfig>,
 ) -> Result<HttpResponse, crate::error::AuthError> {
+    let system_service = SystemService::new(pool.get_ref().clone());
+
+    // Get comprehensive system health metrics
+    let system_metrics = system_service.get_system_health_metrics().await?;
+
+    // Check for maintenance needs
+    let maintenance_alerts = system_service.check_maintenance_needs().await?;
+
+    // Get performance score
+    let performance_score = system_service.get_performance_score().await?;
+
     // Test database connection
     let db_status = match pool.get() {
         Ok(_) => "healthy",
@@ -408,30 +458,101 @@ pub async fn get_system_health(
         }
     };
 
-    // Determine overall health status
-    let overall_status = if db_status == "healthy" && email_status == "healthy" {
-        "healthy"
+    // Determine overall health status based on comprehensive metrics
+    let overall_status =
+        if db_status == "healthy" && email_status == "healthy" && performance_score > 70.0 {
+            if performance_score > 90.0 {
+                "excellent"
+            } else if performance_score > 80.0 {
+                "healthy"
+            } else {
+                "warning"
+            }
+        } else {
+            "critical"
+        };
+
+    // Build recommendations based on performance and environment
+    let mut recommendations = if performance_score < 80.0 {
+        vec![
+            "System performance is below optimal levels",
+            "Consider resource optimization",
+            "Monitor system metrics regularly",
+        ]
     } else {
-        return Err(crate::error::AuthError::ServiceUnavailable);
+        vec![
+            "System is performing well",
+            "Continue monitoring for any changes",
+        ]
     };
+
+    // Add environment-specific recommendations
+    if config.is_development() {
+        recommendations.extend(vec![
+            "Development mode: Enhanced logging enabled",
+            "Development mode: Debug endpoints available",
+            "Development mode: Consider production settings for performance testing",
+        ]);
+    } else {
+        recommendations.extend(vec![
+            "Production mode: Monitor performance closely",
+            "Production mode: Set up alerting for critical issues",
+            "Production mode: Regular maintenance windows recommended",
+        ]);
+    }
 
     let health_info = serde_json::json!({
         "status": overall_status,
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-        "services": {
-            "database": db_status,
-            "email": email_status,
-            "api": "healthy"
-        },
-        "uptime_seconds": std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-        "version": env!("CARGO_PKG_VERSION"),
-        "environment": if config.is_development() { "development" } else { "production" }
+        "timestamp": Utc::now(),
+        "environment": config.environment,
+        "is_development": config.is_development(),
+        "performance_score": performance_score,
+        "database_status": db_status,
+        "email_service_status": email_status,
+        "system_metrics": system_metrics,
+        "maintenance_alerts": maintenance_alerts,
+        "recommendations": recommendations
     });
 
     Ok(HttpResponse::Ok().json(health_info))
+}
+
+/// Get comprehensive system monitoring data
+#[get("/monitoring")]
+pub async fn get_system_monitoring(
+    pool: web::Data<DbPool>,
+) -> Result<HttpResponse, crate::error::AuthError> {
+    let system_service = SystemService::new(pool.get_ref().clone());
+
+    // Get all monitoring data
+    let system_metrics = system_service.get_system_health_metrics().await?;
+    let maintenance_alerts = system_service.check_maintenance_needs().await?;
+    let performance_score = system_service.get_performance_score().await?;
+
+    let monitoring_data = serde_json::json!({
+        "success": true,
+        "timestamp": Utc::now(),
+        "environment": "system", // This endpoint doesn't have config access, but we can show it's system-level
+        "performance_score": performance_score,
+        "system_metrics": system_metrics,
+        "maintenance_alerts": maintenance_alerts,
+        "alert_summary": {
+            "critical": maintenance_alerts.iter().filter(|a| a.get("type").and_then(|t| t.as_str()) == Some("critical")).count(),
+            "warning": maintenance_alerts.iter().filter(|a| a.get("type").and_then(|t| t.as_str()) == Some("warning")).count(),
+            "total": maintenance_alerts.len()
+        },
+        "status": if performance_score > 90.0 {
+            "excellent"
+        } else if performance_score > 80.0 {
+            "healthy"
+        } else if performance_score > 70.0 {
+            "warning"
+        } else {
+            "critical"
+        }
+    });
+
+    Ok(HttpResponse::Ok().json(monitoring_data))
 }
 
 /// Get cache statistics
