@@ -189,45 +189,6 @@ impl OtpService {
         otp_data.is_used = true;
     }
 
-    /// Generate memorable OTP
-    pub fn generate_memorable_otp(&self) -> String {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-
-        const WORDS: &[&str] = &[
-            "apple",
-            "banana",
-            "cherry",
-            "dragon",
-            "eagle",
-            "forest",
-            "garden",
-            "house",
-            "island",
-            "jungle",
-            "knight",
-            "lemon",
-            "mountain",
-            "ocean",
-            "planet",
-            "queen",
-            "river",
-            "sunset",
-            "tiger",
-            "umbrella",
-            "village",
-            "window",
-            "xylophone",
-            "yellow",
-            "zebra",
-        ];
-
-        let word = WORDS[rng.gen_range(0..WORDS.len())];
-        let number = rng.gen_range(100..1000);
-
-        format!("{}{}", word, number)
-    }
-
     /// Generate a secure random OTP with mixed characters
     pub fn generate_secure_otp(&self, length: usize) -> String {
         let mut rng = rand::thread_rng();

@@ -2,6 +2,7 @@ pub mod activity;
 pub mod auth;
 pub mod email;
 pub mod file_upload;
+pub mod geoip;
 pub mod jwt;
 pub mod otp;
 pub mod password;

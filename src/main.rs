@@ -87,6 +87,32 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
+    // Initialize GeoIP service
+    let geo_ip_service = if config.geo_ip.enabled {
+        info!(
+            "GeoIP service enabled with endpoint: {}",
+            config.geo_ip.api_endpoint
+        );
+        if config.geo_ip.cache_enabled {
+            info!("GeoIP caching enabled");
+        }
+        info!(
+            "GeoIP timeout set to {} seconds",
+            config.geo_ip.timeout_seconds
+        );
+        Some(
+            crate::services::geoip::GeoIPService::new_with_timeout(
+                config.geo_ip.cache_enabled,
+                config.geo_ip.timeout_seconds,
+            )
+            .with_endpoint(config.geo_ip.api_endpoint.clone()),
+        )
+    } else {
+        info!("GeoIP service disabled");
+        None
+    };
+    let geo_ip_data = web::Data::new(geo_ip_service);
+
     // Create HTTP server
     let config_data = web::Data::new(config.clone());
     let db_pool_data = web::Data::new(db_pool.clone());
@@ -95,6 +121,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(config_data.clone())
             .app_data(db_pool_data.clone())
+            .app_data(geo_ip_data.clone())
             .wrap({
                 let config_data_clone = config_data.clone();
                 Cors::default()

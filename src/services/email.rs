@@ -158,12 +158,15 @@ impl EmailService {
         Ok(())
     }
 
-    pub async fn send_otp_email(
+    pub async fn send_otp_email_with_details(
         &self,
         to: &str,
         name: &str,
         otp: &str,
         expiry_minutes: i32,
+        ip_address: &str,
+        user_agent: &str,
+        geo_ip_service: Option<&crate::services::geoip::GeoIPService>,
     ) -> AuthResult<()> {
         let mut context = Context::new();
         context.insert("name", name);
@@ -176,9 +179,20 @@ impl EmailService {
                 .format("%Y-%m-%d %H:%M:%S UTC")
                 .to_string(),
         );
-        context.insert("ip_address", "0.0.0.0"); // Default placeholder
-        context.insert("location", "Unknown"); // Default placeholder
-        context.insert("user_agent", "Unknown"); // Default placeholder
+        context.insert("ip_address", ip_address);
+
+        // Get location using geo-IP service if available
+        let location = if let Some(geo_ip) = geo_ip_service {
+            geo_ip.get_location_string(ip_address).await
+        } else {
+            "Unknown".to_string()
+        };
+        context.insert("location", &location);
+        context.insert("user_agent", user_agent);
+        context.insert("browser_info", user_agent);
+        context.insert("support_url", "#");
+        context.insert("security_help_url", "#");
+        context.insert("help_url", "#");
 
         let html_body = self
             .templates
@@ -186,13 +200,13 @@ impl EmailService {
             .map_err(|e| AuthError::InternalError(format!("Template render error: {}", e)))?;
 
         let plain_body = format!(
-            "Hello {},\n\nYour verification code is: {}\n\nThis code will expire in {} minutes.\n\nBest regards,\nThe Platform Team",
-            name, otp, expiry_minutes
+            "Hello {},\n\nYour test verification code is: {}\n\nThis code will expire in {} minutes.\n\nRequest from IP: {}\nUser Agent: {}\n\nBest regards,\nThe Security Team",
+            name, otp, expiry_minutes, ip_address, user_agent
         );
 
         let request = EmailRequest {
             to: to.to_string(),
-            subject: "Your Verification Code".to_string(),
+            subject: "Test Verification Code".to_string(),
             body: plain_body,
             html_body: Some(html_body),
         };
@@ -212,6 +226,10 @@ impl EmailService {
         context.insert("reset_link", reset_url);
         context.insert("expiry_hours", &(expiry_minutes / 60));
         context.insert("app_name", "Auth API");
+
+        // Add missing template variables
+        context.insert("support_url", "#");
+        context.insert("help_url", "#");
 
         let html_body = self
             .templates
@@ -250,6 +268,12 @@ impl EmailService {
         context.insert("account_status", account_status);
         context.insert("created_at", created_at);
 
+        // Add missing template variables
+        context.insert("login_url", "#");
+        context.insert("website_url", "#");
+        context.insert("support_url", "#");
+        context.insert("help_url", "#");
+
         let html_body = self
             .templates
             .render("welcome_email", &context)
@@ -270,26 +294,45 @@ impl EmailService {
         self.send_email(request).await
     }
 
-    pub async fn send_account_locked_email(
+    pub async fn send_account_locked_email_with_details(
         &self,
         to: &str,
         name: &str,
         reason: &str,
+        ip_address: &str,
+        user_agent: &str,
+        geo_ip_service: Option<&crate::services::geoip::GeoIPService>,
     ) -> AuthResult<()> {
         let mut context = Context::new();
         context.insert("name", name);
         context.insert("app_name", "Auth API");
         context.insert("alert_type", "Account Locked");
+        context.insert("details", reason);
         context.insert(
             "timestamp",
             &chrono::Utc::now()
                 .format("%Y-%m-%d %H:%M:%S UTC")
                 .to_string(),
         );
-        context.insert("ip_address", "0.0.0.0"); // Default placeholder
-        context.insert("location", "Unknown"); // Default placeholder
-        context.insert("user_agent", "Unknown"); // Default placeholder
-        context.insert("details", reason);
+        context.insert("ip_address", ip_address);
+
+        // Get location using geo-IP service if available
+        let location = if let Some(geo_ip) = geo_ip_service {
+            geo_ip.get_location_string(ip_address).await
+        } else {
+            "Unknown".to_string()
+        };
+        context.insert("location", &location);
+        context.insert("user_agent", user_agent);
+
+        // Add missing template variables
+        context.insert("change_password_url", "#");
+        context.insert("account_activity_url", "#");
+        context.insert("security_support_url", "#");
+        context.insert("security_support_email", "security@support.com");
+        context.insert("privacy_url", "#");
+        context.insert("terms_url", "#");
+        context.insert("help_url", "#");
 
         let html_body = self
             .templates
@@ -297,13 +340,13 @@ impl EmailService {
             .map_err(|e| AuthError::InternalError(format!("Template render error: {}", e)))?;
 
         let plain_body = format!(
-            "Hello {},\n\nYour account has been locked due to: {}\n\nPlease contact support for assistance.\n\nBest regards,\nThe Security Team",
-            name, reason
+            "Hello {},\n\nYour account has been locked by an administrator.\n\nReason: {}\n\nTime: {}\n\nIP Address: {}\nUser Agent: {}\n\nIf you believe this was done in error, please contact support.\n\nBest regards,\nThe Security Team",
+            name, reason, chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"), ip_address, user_agent
         );
 
         let request = EmailRequest {
             to: to.to_string(),
-            subject: "Account Security Alert".to_string(),
+            subject: "Account Locked - Security Alert".to_string(),
             body: plain_body,
             html_body: Some(html_body),
         };
@@ -311,11 +354,40 @@ impl EmailService {
         self.send_email(request).await
     }
 
-    pub async fn send_two_factor_email(&self, to: &str, name: &str, code: &str) -> AuthResult<()> {
+    pub async fn send_two_factor_email_with_details(
+        &self,
+        to: &str,
+        name: &str,
+        code: &str,
+        ip_address: &str,
+        user_agent: &str,
+        geo_ip_service: Option<&crate::services::geoip::GeoIPService>,
+    ) -> AuthResult<()> {
         let mut context = Context::new();
         context.insert("name", name);
-        context.insert("otp", code);
+        context.insert("app_name", "Auth API");
+        context.insert("otp_code", code);
         context.insert("expiry_minutes", &10); // 2FA codes typically expire in 10 minutes
+        context.insert(
+            "login_time",
+            &chrono::Utc::now()
+                .format("%Y-%m-%d %H:%M:%S UTC")
+                .to_string(),
+        );
+        context.insert("ip_address", ip_address);
+
+        // Get location using geo-IP service if available
+        let location = if let Some(geo_ip) = geo_ip_service {
+            geo_ip.get_location_string(ip_address).await
+        } else {
+            "Unknown".to_string()
+        };
+        context.insert("location", &location);
+        context.insert("user_agent", user_agent);
+        context.insert("browser_info", user_agent); // Use user agent as browser info
+        context.insert("support_url", "#");
+        context.insert("security_help_url", "#");
+        context.insert("help_url", "#");
 
         let html_body = self
             .templates
@@ -323,8 +395,8 @@ impl EmailService {
             .map_err(|e| AuthError::InternalError(format!("Template render error: {}", e)))?;
 
         let plain_body = format!(
-            "Hello {},\n\nYour two-factor authentication code is: {}\n\nThis code will expire in 10 minutes.\n\nBest regards,\nThe Security Team",
-            name, code
+            "Hello {},\n\nYour two-factor authentication code is: {}\n\nThis code will expire in 10 minutes.\n\nLogin attempt from IP: {}\nUser Agent: {}\n\nBest regards,\nThe Security Team",
+            name, code, ip_address, user_agent
         );
 
         let request = EmailRequest {
@@ -417,6 +489,7 @@ The {} Security Team",
     ) -> AuthResult<()> {
         let mut context = Context::new();
         context.insert("name", name);
+        context.insert("app_name", "Auth API");
         context.insert("alert_type", alert_type);
         context.insert("details", details);
         context.insert(
@@ -425,6 +498,9 @@ The {} Security Team",
                 .format("%Y-%m-%d %H:%M:%S UTC")
                 .to_string(),
         );
+        context.insert("ip_address", "0.0.0.0");
+        context.insert("location", "Unknown");
+        context.insert("user_agent", "Unknown");
 
         let html_body = self
             .templates
@@ -434,6 +510,50 @@ The {} Security Team",
         let plain_body = format!(
             "Hello {},\n\nA security alert has been triggered: {}\n\nDetails: {}\n\nTime: {}\n\nIf this wasn't you, please change your password immediately.\n\nBest regards,\nThe Security Team",
             name, alert_type, details, chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        );
+
+        let request = EmailRequest {
+            to: to.to_string(),
+            subject: "Security Alert".to_string(),
+            body: plain_body,
+            html_body: Some(html_body),
+        };
+
+        self.send_email(request).await
+    }
+
+    pub async fn send_security_alert_email_with_details(
+        &self,
+        to: &str,
+        name: &str,
+        alert_type: &str,
+        details: &str,
+        ip_address: &str,
+        user_agent: &str,
+    ) -> AuthResult<()> {
+        let mut context = Context::new();
+        context.insert("name", name);
+        context.insert("app_name", "Auth API");
+        context.insert("alert_type", alert_type);
+        context.insert("details", details);
+        context.insert(
+            "timestamp",
+            &chrono::Utc::now()
+                .format("%Y-%m-%d %H:%M:%S UTC")
+                .to_string(),
+        );
+        context.insert("ip_address", ip_address);
+        context.insert("location", "Unknown"); // Could be enhanced with geo-IP lookup
+        context.insert("user_agent", user_agent);
+
+        let html_body = self
+            .templates
+            .render("security_alert_email", &context)
+            .map_err(|e| AuthError::InternalError(format!("Template render error: {}", e)))?;
+
+        let plain_body = format!(
+            "Hello {},\n\nA security alert has been triggered: {}\n\nDetails: {}\n\nTime: {}\n\nIP Address: {}\nUser Agent: {}\n\nIf this wasn't you, please change your password immediately.\n\nBest regards,\nThe Security Team",
+            name, alert_type, details, chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"), ip_address, user_agent
         );
 
         let request = EmailRequest {

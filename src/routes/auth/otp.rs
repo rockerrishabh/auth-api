@@ -69,18 +69,16 @@ pub struct GenerateCustomOtpRequest {
     pub identifier: String,
     #[validate(range(min = 4, max = 20))]
     pub length: usize,
-    #[allow(dead_code)] // False positive - field IS used in process_memorable_field function
-    pub memorable: Option<bool>, // Used to generate memorable OTP codes
 }
 
-/// Create a custom OTP - NOTE: The `memorable` field in GenerateCustomOtpRequest IS used
-/// to determine whether to generate memorable or alphanumeric OTP codes
+/// Create a custom OTP with alphanumeric characters
 #[post("/create")]
 pub async fn create_otp(
     pool: web::Data<DbPool>,
     config: web::Data<AppConfig>,
-    req: web::Json<CreateOtpRequest>,
+    req: web::Json<GenerateCustomOtpRequest>,
     http_req: HttpRequest,
+    geo_ip_service: Option<web::Data<Option<crate::services::geoip::GeoIPService>>>,
 ) -> AuthResult<HttpResponse> {
     req.validate()
         .map_err(|e| crate::error::AuthError::ValidationFailed(e.to_string()))?;
@@ -131,8 +129,21 @@ pub async fn create_otp(
             // Get user info for 2FA email
             if let Ok(Some(current_user)) = user_service.get_user_by_id(current_user_id).await {
                 let user_name = current_user.username.clone();
+                let ip_address = crate::services::auth::extract_ip_address(&http_req);
+                let user_agent = crate::services::auth::extract_user_agent(&http_req);
+                let geo_ip_ref = geo_ip_service
+                    .as_ref()
+                    .and_then(|data| data.as_ref().as_ref());
+
                 if let Err(email_err) = email_svc
-                    .send_two_factor_email(&user_email, &user_name, &otp_data.code)
+                    .send_two_factor_email_with_details(
+                        &user_email,
+                        &user_name,
+                        &otp_data.code,
+                        &ip_address,
+                        &user_agent,
+                        geo_ip_ref,
+                    )
                     .await
                 {
                     eprintln!("Failed to send two-factor email: {:?}", email_err);
@@ -305,22 +316,8 @@ pub async fn create_custom_otp(
         _ => crate::db::models::OtpType::EmailVerification,
     };
 
-    // Create a helper function to ensure field usage is detected
-    fn process_memorable_field(memorable: Option<bool>) -> (bool, String) {
-        match memorable {
-            Some(true) => (true, "memorable".to_string()),
-            Some(false) => (false, "alphanumeric".to_string()),
-            None => (false, "alphanumeric".to_string()),
-        }
-    }
-
-    let (use_memorable, otp_type_str) = process_memorable_field(req.memorable);
-
-    let code = if use_memorable {
-        otp_service.generate_memorable_otp()
-    } else {
-        otp_service.generate_alphanumeric_otp(req.length)
-    };
+    // Generate alphanumeric OTP code
+    let code = otp_service.generate_alphanumeric_otp(req.length);
 
     // Validate the generated OTP format
     otp_service.validate_otp_format(&code, &otp_type)?;
@@ -350,12 +347,11 @@ pub async fn create_custom_otp(
 
     Ok(HttpResponse::Ok().json(OtpResponse {
         otp_id: otp_data.id,
-        message: format!("Custom OTP created: {}. Type: {}. Format valid: {}. Locally validated: {}. OTP Type String: {}",
+        message: format!(
+            "Custom OTP created: {}. Type: alphanumeric. Format valid: {}. Locally validated: {}",
             code,
-            if use_memorable { "memorable" } else { "alphanumeric" },
             otp_service.validate_otp_format(&code, &otp_type).is_ok(),
-            is_valid_locally,
-            otp_type_str
+            is_valid_locally
         ),
         success: true,
     }))
@@ -413,9 +409,8 @@ pub async fn demo_otp_methods(
     // Create OTP service
     let otp_service = OtpService::new(config.get_ref().security.clone(), pool.get_ref().clone());
 
-    // Demonstrate all the previously unused methods
+    // Demonstrate OTP generation
     let alphanumeric = otp_service.generate_alphanumeric_otp(10);
-    let memorable = otp_service.generate_memorable_otp();
 
     // Create test OTP data
     let mut test_otp = otp_service.create_otp_data(
@@ -436,7 +431,7 @@ pub async fn demo_otp_methods(
     let mut test_otp2 = otp_service.create_otp_data(
         current_user_id,
         OtpType::EmailVerification,
-        memorable.clone(),
+        alphanumeric.clone(),
     );
 
     // Test local validation with wrong code (demonstrates decrement_attempts)
@@ -445,8 +440,8 @@ pub async fn demo_otp_methods(
 
     Ok(HttpResponse::Ok().json(OtpResponse {
         otp_id: Uuid::new_v4(),
-        message: format!("Demo completed: Alphanumeric={}, Memorable={}, Format valid={}, Valid result={}, Invalid result={}, Attempts before={}, Attempts after={}",
-            alphanumeric, memorable, format_valid, valid_result, invalid_result, attempts_before, test_otp2.attempts_remaining),
+        message: format!("Demo completed: Alphanumeric={}, Format valid={}, Valid result={}, Invalid result={}, Attempts before={}, Attempts after={}",
+            alphanumeric, format_valid, valid_result, invalid_result, attempts_before, test_otp2.attempts_remaining),
         success: true,
     }))
 }

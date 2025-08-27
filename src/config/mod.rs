@@ -38,6 +38,15 @@ pub struct EmailConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct GeoIPConfig {
+    pub enabled: bool,
+    pub cache_enabled: bool,
+    pub api_endpoint: String,
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub timeout_seconds: u64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct SecurityConfig {
     #[serde(deserialize_with = "deserialize_u32")]
     pub argon2_memory_cost: u32,
@@ -81,6 +90,7 @@ pub struct AppConfig {
     pub email: EmailConfig,
     pub security: SecurityConfig,
     pub upload: UploadConfig,
+    pub geo_ip: GeoIPConfig,
     pub frontend_url: String,
     pub two_factor_required_roles: Vec<String>,
 }
@@ -250,6 +260,22 @@ impl AppConfig {
                     "webp".to_string(),
                 ],
             },
+            geo_ip: GeoIPConfig {
+                enabled: std::env::var("APP_GEO_IP__ENABLED")
+                    .unwrap_or_else(|_| "false".to_string())
+                    .parse()
+                    .unwrap_or(false),
+                cache_enabled: std::env::var("APP_GEO_IP__CACHE_ENABLED")
+                    .unwrap_or_else(|_| "true".to_string())
+                    .parse()
+                    .unwrap_or(true),
+                api_endpoint: std::env::var("APP_GEO_IP__API_ENDPOINT")
+                    .unwrap_or_else(|_| "http://ip-api.com/json".to_string()),
+                timeout_seconds: std::env::var("APP_GEO_IP__TIMEOUT_SECONDS")
+                    .unwrap_or_else(|_| "5".to_string())
+                    .parse()
+                    .unwrap_or(5),
+            },
             two_factor_required_roles: std::env::var("APP_TWO_FACTOR__REQUIRED_ROLES")
                 .unwrap_or_else(|_| "admin,superadmin".to_string())
                 .split(',')
@@ -325,6 +351,12 @@ impl Default for AppConfig {
                     "gif".to_string(),
                     "webp".to_string(),
                 ],
+            },
+            geo_ip: GeoIPConfig {
+                enabled: false,
+                cache_enabled: true,
+                api_endpoint: "http://ip-api.com/json".to_string(),
+                timeout_seconds: 5,
             },
             frontend_url: "http://localhost:3000".to_string(),
             two_factor_required_roles: vec!["admin".to_string(), "superadmin".to_string()],

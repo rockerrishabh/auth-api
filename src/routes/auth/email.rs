@@ -174,8 +174,19 @@ pub async fn send_security_alert_email(
     // Create email service
     let email_service = EmailService::new(config.get_ref().email.clone())?;
 
+    // Extract real client information
+    let ip_address = crate::services::auth::extract_ip_address(&http_req);
+    let user_agent = crate::services::auth::extract_user_agent(&http_req);
+
     email_service
-        .send_security_alert_email(&req.to, &req.name, &req.alert_type, &req.details)
+        .send_security_alert_email_with_details(
+            &req.to,
+            &req.name,
+            &req.alert_type,
+            &req.details,
+            &ip_address,
+            &user_agent,
+        )
         .await?;
 
     Ok(HttpResponse::Ok().json(EmailResponse {
@@ -190,6 +201,7 @@ pub async fn test_otp_email(
     config: web::Data<AppConfig>,
     req: web::Json<SendWelcomeEmailRequest>,
     http_req: HttpRequest,
+    geo_ip_service: Option<web::Data<Option<crate::services::geoip::GeoIPService>>>,
 ) -> AuthResult<HttpResponse> {
     req.validate()
         .map_err(|e| crate::error::AuthError::ValidationFailed(e.to_string()))?;
@@ -211,6 +223,13 @@ pub async fn test_otp_email(
     // Create email service
     let email_service = EmailService::new(config.get_ref().email.clone())?;
 
+    // Extract real client information
+    let ip_address = crate::services::auth::extract_ip_address(&http_req);
+    let user_agent = crate::services::auth::extract_user_agent(&http_req);
+    let geo_ip_ref = geo_ip_service
+        .as_ref()
+        .and_then(|data| data.as_ref().as_ref());
+
     // Generate a test OTP
     let otp_service = crate::services::otp::OtpService::new(
         config.get_ref().security.clone(),
@@ -219,8 +238,14 @@ pub async fn test_otp_email(
     let test_otp = otp_service.generate_otp(&crate::db::models::OtpType::EmailVerification);
 
     email_service
-        .send_otp_email(
-            &req.to, &req.name, &test_otp, 5, // 5 minutes for testing
+        .send_otp_email_with_details(
+            &req.to,
+            &req.name,
+            &test_otp,
+            5, // 5 minutes for testing
+            &ip_address,
+            &user_agent,
+            geo_ip_ref,
         )
         .await?;
 

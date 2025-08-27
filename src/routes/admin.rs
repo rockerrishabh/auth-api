@@ -256,6 +256,8 @@ pub fn configure_admin_routes(
                     .service(system::initialize_system_settings)
                     .service(system::get_all_system_settings)
                     .service(system::get_system_health)
+                    .service(system::get_cache_stats)
+                    .service(system::clear_cache)
                     .app_data(web::Data::new(config)),
             ),
     );

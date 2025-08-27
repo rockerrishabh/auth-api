@@ -429,3 +429,84 @@ pub async fn get_system_health(
 
     Ok(HttpResponse::Ok().json(health_info))
 }
+
+/// Get cache statistics
+#[get("/cache/stats")]
+pub async fn get_cache_stats(
+    geo_ip_service: Option<web::Data<Option<crate::services::geoip::GeoIPService>>>,
+    _http_req: HttpRequest,
+) -> Result<HttpResponse, crate::error::AuthError> {
+    let (cache_size, cache_enabled) = if let Some(geo_ip_data) = geo_ip_service.as_ref() {
+        if let Some(geo_ip) = geo_ip_data.as_ref().as_ref() {
+            geo_ip.cache_stats().await
+        } else {
+            (0, false)
+        }
+    } else {
+        (0, false)
+    };
+
+    #[derive(Serialize)]
+    struct CacheStatsResponse {
+        message: String,
+        success: bool,
+        cache_enabled: bool,
+        cache_size: usize,
+        cache_status: String,
+    }
+
+    let cache_status = if cache_enabled {
+        if cache_size > 0 {
+            format!("Active with {} entries", cache_size)
+        } else {
+            "Active (empty)".to_string()
+        }
+    } else {
+        "Disabled".to_string()
+    };
+
+    Ok(HttpResponse::Ok().json(CacheStatsResponse {
+        message: "Cache statistics retrieved successfully".to_string(),
+        success: true,
+        cache_enabled,
+        cache_size,
+        cache_status,
+    }))
+}
+
+/// Clear cache
+#[post("/cache/clear")]
+pub async fn clear_cache(
+    geo_ip_service: Option<web::Data<Option<crate::services::geoip::GeoIPService>>>,
+    _http_req: HttpRequest,
+) -> Result<HttpResponse, crate::error::AuthError> {
+    let cache_cleared = if let Some(geo_ip_data) = geo_ip_service.as_ref() {
+        if let Some(geo_ip) = geo_ip_data.as_ref().as_ref() {
+            geo_ip.clear_cache().await;
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    #[derive(Serialize)]
+    struct ClearCacheResponse {
+        message: String,
+        success: bool,
+        cache_cleared: bool,
+    }
+
+    let message = if cache_cleared {
+        "Cache cleared successfully".to_string()
+    } else {
+        "Cache service not available or disabled".to_string()
+    };
+
+    Ok(HttpResponse::Ok().json(ClearCacheResponse {
+        message,
+        success: true,
+        cache_cleared,
+    }))
+}

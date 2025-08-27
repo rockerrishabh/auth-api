@@ -1,10 +1,11 @@
 # 🔐 Auth API - Enterprise Authentication System
 
-A comprehensive, production-ready authentication API built with Rust, Actix Web, and PostgreSQL. This system provides enterprise-grade security with modern authentication features, user management, and administrative controls.
+A comprehensive, production-ready authentication API built with Rust, Actix Web, and PostgreSQL. This system provides enterprise-grade security with modern authentication features, user management, administrative controls, and advanced security monitoring including geo-IP location tracking.
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![PostgreSQL](https://img.shields.io/badge/postgresql-12+-blue.svg)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Geo-IP](https://img.shields.io/badge/geo--ip-enabled-success.svg)](https://www.maxmind.com/)
 
 ## 🚀 Features
 
@@ -34,8 +35,11 @@ A comprehensive, production-ready authentication API built with Rust, Actix Web,
 - ✅ **CORS Configuration**
 - ✅ **Input Validation** and sanitization
 - ✅ **Secure File Upload** handling
-- ✅ **OTP Generation** and verification
+- ✅ **Alphanumeric OTP Generation** and verification
 - ✅ **Account Lockout** protection
+- ✅ **Geo-IP Location Tracking** with caching
+- ✅ **Real User Data in Security Emails** (no placeholders)
+- ✅ **Advanced Security Monitoring** and alerting
 
 ### File Management
 
@@ -45,22 +49,34 @@ A comprehensive, production-ready authentication API built with Rust, Actix Web,
 - ✅ **File Type Validation**
 - ✅ **Static File Serving**
 
+### Advanced Security Features
+
+- ✅ **Geo-IP Location Detection** - Track user locations in security events
+- ✅ **Security Email Templates** - Professional alerts with real user data
+- ✅ **Cache Management** - Admin endpoints for cache statistics and clearing
+- ✅ **Activity Auditing** - Comprehensive user activity tracking
+- ✅ **System Health Monitoring** - Built-in health checks and diagnostics
+- ✅ **Dynamic Configuration** - Runtime system settings management
+
 ### Developer Experience
 
 - ✅ **Comprehensive Error Handling**
 - ✅ **Clean Architecture** with services
-- ✅ **Configuration Management** (TOML)
+- ✅ **Configuration Management** (Environment variables)
 - ✅ **Database Migrations** with Diesel
-- ✅ **Email Templating** system
+- ✅ **Advanced Email Templating** with real data integration
 - ✅ **Logging and Monitoring** ready
+- ✅ **Production-Ready** with Docker support
 
 ## 📋 Table of Contents
 
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
+- [Geo-IP Configuration](#geo-ip-configuration)
 - [API Documentation](#api-documentation)
 - [Database Schema](#database-schema)
+- [Email Templates](#email-templates)
 - [Development](#development)
 - [Security Features](#security-features)
 - [Deployment](#deployment)
@@ -182,6 +198,15 @@ APP_UPLOAD__GENERATE_THUMBNAILS=true
 APP_UPLOAD__ALLOWED_TYPES=["jpg","jpeg","png","gif","webp"]
 ```
 
+#### Geo-IP Configuration
+
+```bash
+APP_GEO_IP__ENABLED=false
+APP_GEO_IP__CACHE_ENABLED=true
+APP_GEO_IP__API_ENDPOINT=http://ip-api.com/json
+APP_GEO_IP__TIMEOUT_SECONDS=5
+```
+
 ### Configuration Files
 
 The application supports layered configuration:
@@ -190,6 +215,54 @@ The application supports layered configuration:
 2. **Environment Config** (`config/{environment}.toml`) - Environment-specific overrides
 3. **Local Config** (`config/local.toml`) - Personal development settings
 4. **Environment Variables** - Highest priority overrides
+
+## 🌍 Geo-IP Configuration
+
+The application includes advanced geo-IP location tracking that provides real geographic information in security emails instead of generic "Unknown" placeholders.
+
+### Geo-IP Features
+
+- **📍 Real Location Detection** - Converts IP addresses to city/country information
+- **⚡ Intelligent Caching** - Reduces API calls and improves performance
+- **🛡️ Privacy-Aware** - Handles local/private IPs appropriately
+- **🔄 Graceful Degradation** - Falls back to "Unknown" if geo-IP fails
+- **⚙️ Admin Management** - Cache statistics and clearing endpoints
+
+### Configuration Options
+
+| Variable                      | Default                  | Description                             |
+| ----------------------------- | ------------------------ | --------------------------------------- |
+| `APP_GEO_IP__ENABLED`         | `false`                  | Enable/disable geo-IP location tracking |
+| `APP_GEO_IP__CACHE_ENABLED`   | `true`                   | Enable caching for better performance   |
+| `APP_GEO_IP__API_ENDPOINT`    | `http://ip-api.com/json` | Geo-IP API service endpoint             |
+| `APP_GEO_IP__TIMEOUT_SECONDS` | `5`                      | Request timeout in seconds              |
+
+### Example Locations
+
+**Before Geo-IP:**
+
+- Location: Unknown
+- IP: 8.8.8.8
+
+**After Geo-IP:**
+
+- Location: Mountain View, United States
+- IP: 8.8.8.8
+
+**Local/Private IPs:**
+
+- Location: Local Network, Localhost
+- IP: 127.0.0.1
+
+### Admin Endpoints
+
+```bash
+# Get cache statistics
+GET /admin/system/cache/stats
+
+# Clear geo-IP cache
+POST /admin/system/cache/clear
+```
 
 ## 📚 API Documentation
 
@@ -287,7 +360,6 @@ POST /auth/otp/demo                    - Demo OTP methods
 ```
 POST /auth/password/validate-strength  - Validate password strength
 POST /auth/password/generate-secure    - Generate secure password
-POST /auth/password/generate-memorable - Generate memorable password
 POST /auth/password/hash               - Hash password
 POST /auth/password/hash-and-validate  - Hash and validate password
 ```
@@ -350,6 +422,8 @@ PUT  /admin/system/config             - Update system configuration
 POST /admin/system/initialize         - Initialize system settings
 GET  /admin/system/settings           - Get all system settings
 GET  /admin/system/health             - Get system health
+GET  /admin/system/cache/stats        - Get geo-IP cache statistics
+POST /admin/system/cache/clear        - Clear geo-IP cache
 ```
 
 ### Utility Endpoints
@@ -506,8 +580,11 @@ The application includes comprehensive HTML email templates optimized for variou
 
 - `{{ login_time }}` - When the event occurred
 - `{{ ip_address }}` - IP address of the request
-- `{{ location }}` - Geographic location (if available)
+- `{{ location }}` - **Real geographic location** (City, Country) - no more "Unknown" placeholders!
 - `{{ user_agent }}` - Browser/device information
+- `{{ alert_type }}` - Type of security alert
+- `{{ details }}` - Specific alert details
+- `{{ timestamp }}` - When the alert was generated
 
 ## 🔧 Development
 
@@ -547,7 +624,7 @@ diesel print-schema
 - **Argon2 Hashing** with configurable parameters
 - **Password Strength Validation**
 - **Secure Password Generation**
-- **Memorable Password Creation**
+- **JWT-based Password Reset** with secure URL verification
 
 ### Authentication Security
 
@@ -565,6 +642,9 @@ diesel print-schema
 - **Email Verification** required
 - **Session Management** with expiration
 - **Audit Logging** for compliance
+- **Geo-IP Location Tracking** in security events
+- **Real User Data in Security Emails** (IP, location, device info)
+- **Advanced Security Monitoring** with geographic awareness
 
 ### File Upload Security
 
@@ -584,11 +664,13 @@ diesel print-schema
 - [ ] Configure proper CORS origins
 - [ ] Enable HTTPS in production
 - [ ] Configure 2FA role requirements (`APP_TWO_FACTOR__REQUIRED_ROLES`)
+- [ ] **Configure Geo-IP settings** (`APP_GEO_IP__ENABLED=true` for location tracking)
 - [ ] Set up log aggregation
 - [ ] Configure monitoring and alerts
 - [ ] Set up database backups
 - [ ] Configure rate limiting
 - [ ] Set up SSL/TLS certificates
+- [ ] **Review security email templates** - ensure they show real user data
 
 ### Environment Setup
 
@@ -641,6 +723,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Argon2** - Industry-standard password hashing
 - **JWT** - Secure token-based authentication
 - **PostgreSQL** - Advanced open source relational database
+- **ip-api.com** - Free Geo-IP location service
+- **reqwest** - HTTP client for API integrations
 - **Rust Community** - Excellent crates and documentation
 
 ---
