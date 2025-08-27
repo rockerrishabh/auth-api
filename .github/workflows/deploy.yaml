@@ -35,7 +35,7 @@ jobs:
           # Ensure NASM is installed
           sudo apt-get update
           sudo apt-get install -y nasm
-          cargo build --release --locked
+          cargo build --release --locked --features avif-encoding
           # Ensure the binary is built
           if [ -f target/release/auth-api ]; then
             echo "Build successful, binary found."

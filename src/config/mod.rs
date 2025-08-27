@@ -258,6 +258,7 @@ impl AppConfig {
                     "png".to_string(),
                     "gif".to_string(),
                     "webp".to_string(),
+                    "avif".to_string(),
                 ],
             },
             geo_ip: GeoIPConfig {
@@ -350,6 +351,7 @@ impl Default for AppConfig {
                     "png".to_string(),
                     "gif".to_string(),
                     "webp".to_string(),
+                    "avif".to_string(),
                 ],
             },
             geo_ip: GeoIPConfig {
