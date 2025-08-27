@@ -13,7 +13,7 @@ A comprehensive, production-ready authentication API built with Rust, Actix Web,
 - ✅ **User Registration** with email verification
 - ✅ **Secure Login** with JWT access/refresh tokens
 - ✅ **Token Rotation** for enhanced security
-- ✅ **Password Reset** with OTP verification
+- ✅ **Password Reset** with JWT URL verification
 - ✅ **Email Verification** system
 - ✅ **Two-Factor Authentication** (2FA) support
 - ✅ **Secure Logout** with token revocation
@@ -193,7 +193,7 @@ The application supports layered configuration:
 ### Base URL
 
 ```
-http://localhost:5000/api/v1
+http://localhost:5000/v1
 ```
 
 ### Authentication Endpoints
@@ -204,6 +204,7 @@ http://localhost:5000/api/v1
 POST /auth/register                    - User registration
 POST /auth/login                       - User login
 POST /auth/password-reset              - Request password reset
+GET  /auth/password-reset/verify       - Verify password reset token
 GET  /auth/email-verification/verify   - Verify email with token
 POST /auth/email-verification/resend   - Resend verification email
 ```
@@ -222,7 +223,7 @@ GET  /auth/sessions                    - Get user sessions
 DELETE /auth/sessions/{id}             - Revoke specific session
 DELETE /auth/sessions/revoke-other     - Revoke other sessions
 POST /auth/upload/avatar               - Upload user avatar
-POST /auth/password-reset/complete     - Complete password reset with OTP
+POST /auth/password-reset/complete     - Complete password reset with JWT token
 ```
 
 #### Two-Factor Authentication

@@ -3,7 +3,7 @@ use crate::{
     db::DbPool,
     error::AuthResult,
     middleware::extract_user_id_from_request,
-    services::{email::EmailService, user::UserService},
+    services::{email::EmailService, otp::OtpService, user::UserService},
 };
 use actix_web::{get, post, put, web, HttpRequest, HttpResponse};
 use chrono::Utc;
@@ -138,6 +138,27 @@ pub async fn update_user_password(
     user_service
         .update_user_password(current_user_id, &req.new_password)
         .await?;
+
+    // Clean up expired OTPs for the user after password change
+    let otp_service = OtpService::new(
+        crate::config::SecurityConfig {
+            argon2_memory_cost: 65536,
+            argon2_time_cost: 3,
+            argon2_parallelism: 1,
+            lockout_duration: 900,
+            max_failed_attempts: 5,
+            session_timeout: 3600,
+        },
+        pool.get_ref().clone(),
+    );
+
+    // Don't fail the password update if OTP cleanup fails
+    if let Err(e) = otp_service
+        .cleanup_expired_otps_for_user(current_user_id)
+        .await
+    {
+        eprintln!("Failed to cleanup OTPs after password update: {:?}", e);
+    }
 
     Ok(HttpResponse::Ok().json(UserManagementResponse {
         message: "Password updated successfully".to_string(),

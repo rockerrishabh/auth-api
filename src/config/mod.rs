@@ -268,7 +268,7 @@ impl Default for AppConfig {
             port: 5000,
             environment: "development".to_string(),
             database: DatabaseConfig {
-                url: "postgres://user:password@localhost/auth_db".to_string(),
+                url: "postgres://user:password@localhost:5432/auth_db".to_string(),
                 max_connections: 10,
                 min_connections: 2,
                 connect_timeout: 10,
@@ -276,17 +276,17 @@ impl Default for AppConfig {
                 max_lifetime: 3600,
             },
             jwt: JwtConfig {
-                secret: "your-secret-key".to_string(),
+                secret: "change-me-in-production-jwt-secret-key-32-chars-min".to_string(),
                 access_token_expiry: 3600,     // 1 hour
                 refresh_token_expiry: 2592000, // 30 days
             },
             email: EmailConfig {
-                smtp_host: "smtp.gmail.com".to_string(),
+                smtp_host: "smtp.example.com".to_string(),
                 smtp_port: 587,
-                smtp_username: "your-email@gmail.com".to_string(),
-                smtp_password: "your-password".to_string(),
-                from_email: "noreply@yourapp.com".to_string(),
-                from_name: "Your App".to_string(),
+                smtp_username: "noreply@example.com".to_string(),
+                smtp_password: "change-me-in-production".to_string(),
+                from_email: "noreply@example.com".to_string(),
+                from_name: "Auth API".to_string(),
             },
             security: SecurityConfig {
                 argon2_memory_cost: 65536, // 64MB

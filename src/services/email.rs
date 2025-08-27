@@ -63,7 +63,7 @@ impl EmailService {
 
         // Load HTML templates
         tera.add_raw_template(
-            "email_verification_otp",
+            "email_verification",
             &fs::read_to_string("templates/email_verification.html").map_err(|e| {
                 AuthError::InternalError(format!(
                     "Failed to load email verification template: {}",
@@ -167,12 +167,22 @@ impl EmailService {
     ) -> AuthResult<()> {
         let mut context = Context::new();
         context.insert("name", name);
-        context.insert("otp", otp);
+        context.insert("app_name", "Auth API");
+        context.insert("otp_code", otp);
         context.insert("expiry_minutes", &expiry_minutes);
+        context.insert(
+            "login_time",
+            &chrono::Utc::now()
+                .format("%Y-%m-%d %H:%M:%S UTC")
+                .to_string(),
+        );
+        context.insert("ip_address", "0.0.0.0"); // Default placeholder
+        context.insert("location", "Unknown"); // Default placeholder
+        context.insert("user_agent", "Unknown"); // Default placeholder
 
         let html_body = self
             .templates
-            .render("email_verification_otp", &context)
+            .render("two_factor_otp", &context)
             .map_err(|e| AuthError::InternalError(format!("Template render error: {}", e)))?;
 
         let plain_body = format!(
@@ -190,17 +200,18 @@ impl EmailService {
         self.send_email(request).await
     }
 
-    pub async fn send_password_reset_email(
+    pub async fn send_password_reset_email_with_link(
         &self,
         to: &str,
         name: &str,
-        reset_token: &str,
+        reset_url: &str,
         expiry_minutes: i32,
     ) -> AuthResult<()> {
         let mut context = Context::new();
         context.insert("name", name);
-        context.insert("reset_token", reset_token);
-        context.insert("expiry_minutes", &expiry_minutes);
+        context.insert("reset_link", reset_url);
+        context.insert("expiry_hours", &(expiry_minutes / 60));
+        context.insert("app_name", "Auth API");
 
         let html_body = self
             .templates
@@ -208,8 +219,8 @@ impl EmailService {
             .map_err(|e| AuthError::InternalError(format!("Template render error: {}", e)))?;
 
         let plain_body = format!(
-            "Hello {},\n\nYour password reset code is: {}\n\nThis code will expire in {} minutes.\n\nIf you didn't request this reset, please ignore this email.\n\nBest regards,\nThe Security Team",
-            name, reset_token, expiry_minutes
+            "Hello {},\n\nYou requested a password reset for your account.\n\nClick the following link to reset your password:\n{}\n\nThis link will expire in {} minutes.\n\nIf you didn't request this reset, please ignore this email.\n\nBest regards,\nThe Security Team",
+            name, reset_url, expiry_minutes
         );
 
         let request = EmailRequest {
@@ -222,9 +233,22 @@ impl EmailService {
         self.send_email(request).await
     }
 
-    pub async fn send_welcome_email(&self, to: &str, name: &str) -> AuthResult<()> {
+    pub async fn send_welcome_email(
+        &self,
+        to: &str,
+        name: &str,
+        email: &str,
+        username: &str,
+        account_status: &str,
+        created_at: &str,
+    ) -> AuthResult<()> {
         let mut context = Context::new();
         context.insert("name", name);
+        context.insert("app_name", "Auth API");
+        context.insert("email", email);
+        context.insert("username", username);
+        context.insert("account_status", account_status);
+        context.insert("created_at", created_at);
 
         let html_body = self
             .templates
@@ -254,13 +278,18 @@ impl EmailService {
     ) -> AuthResult<()> {
         let mut context = Context::new();
         context.insert("name", name);
-        context.insert("reason", reason);
+        context.insert("app_name", "Auth API");
+        context.insert("alert_type", "Account Locked");
         context.insert(
             "timestamp",
             &chrono::Utc::now()
                 .format("%Y-%m-%d %H:%M:%S UTC")
                 .to_string(),
         );
+        context.insert("ip_address", "0.0.0.0"); // Default placeholder
+        context.insert("location", "Unknown"); // Default placeholder
+        context.insert("user_agent", "Unknown"); // Default placeholder
+        context.insert("details", reason);
 
         let html_body = self
             .templates
@@ -426,17 +455,13 @@ The {} Security Team",
     ) -> AuthResult<()> {
         let mut context = Context::new();
         context.insert("name", name);
-        context.insert("verification_url", verification_url);
-        context.insert(
-            "timestamp",
-            &chrono::Utc::now()
-                .format("%Y-%m-%d %H:%M:%S UTC")
-                .to_string(),
-        );
+        context.insert("verification_link", verification_url);
+        context.insert("expiry_hours", &24); // 24 hours expiry
+        context.insert("app_name", "Auth API");
 
         let html_body = self
             .templates
-            .render("email_verification_link", &context)
+            .render("email_verification", &context)
             .map_err(|e| AuthError::InternalError(format!("Template render error: {}", e)))?;
 
         let plain_body = format!(

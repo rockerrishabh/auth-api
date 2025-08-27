@@ -160,4 +160,27 @@ impl JwtService {
 
         self.generate_access_token(user_id, &claims.email, &claims.role)
     }
+
+    pub fn generate_password_reset_token(&self, user_id: Uuid, email: &str) -> AuthResult<String> {
+        let now = Utc::now();
+        // Password reset tokens expire in 15 minutes
+        let expires_at = now + Duration::minutes(15);
+
+        let claims = Claims {
+            sub: user_id.to_string(),
+            email: email.to_string(),
+            role: "password_reset".to_string(), // Special role for password reset
+            token_type: "password_reset".to_string(),
+            exp: expires_at.timestamp() as usize,
+            iat: now.timestamp() as usize,
+        };
+
+        encode(&Header::default(), &claims, &self.encoding_key).map_err(|e| {
+            AuthError::InternalError(format!("Password reset token encoding error: {}", e))
+        })
+    }
+
+    pub fn verify_password_reset_token(&self, token: &str) -> AuthResult<Claims> {
+        self.verify_token(token, "password_reset")
+    }
 }

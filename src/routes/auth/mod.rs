@@ -25,7 +25,11 @@ pub fn configure_auth_routes(cfg: &mut web::ServiceConfig, auth_middleware: Auth
             // Public routes (no authentication required)
             .service(login::login_user)
             .service(register::register_user)
-            .service(web::scope("/password-reset").service(password_reset::request_password_reset))
+            .service(
+                web::scope("/password-reset")
+                    .service(password_reset::request_password_reset)
+                    .service(password_reset::verify_password_reset_token),
+            )
             .service(
                 web::scope("/email-verification").service(email_verification::verify_email_link),
             )

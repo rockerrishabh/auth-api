@@ -30,6 +30,12 @@ pub struct SendWelcomeEmailRequest {
     pub to: String,
     #[validate(length(min = 1, max = 100))]
     pub name: String,
+    #[validate(email, length(max = 255))]
+    pub email: String,
+    #[validate(length(min = 1, max = 50))]
+    pub username: String,
+    #[validate(length(min = 1, max = 20))]
+    pub account_status: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Validate)]
@@ -119,7 +125,21 @@ pub async fn send_welcome_email(
     // Create email service
     let email_service = EmailService::new(config.get_ref().email.clone())?;
 
-    email_service.send_welcome_email(&req.to, &req.name).await?;
+    let created_at = chrono::Utc::now()
+        .format("%Y-%m-%d %H:%M:%S UTC")
+        .to_string();
+    let account_status = req.account_status.as_deref().unwrap_or("Active");
+
+    email_service
+        .send_welcome_email(
+            &req.to,
+            &req.name,
+            &req.email,
+            &req.username,
+            account_status,
+            &created_at,
+        )
+        .await?;
 
     Ok(HttpResponse::Ok().json(EmailResponse {
         message: "Welcome email sent successfully".to_string(),

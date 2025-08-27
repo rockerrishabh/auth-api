@@ -55,7 +55,7 @@ impl OtpService {
     pub fn generate_otp(&self, otp_type: &OtpType) -> String {
         match otp_type {
             OtpType::EmailVerification | OtpType::PasswordReset => {
-                // 6-digit numeric OTP for email verification and password reset
+                // 6-digit numeric OTP for email verification and 2FA
                 self.generate_numeric_otp(6)
             }
             OtpType::LoginVerification => {
@@ -383,7 +383,7 @@ impl OtpService {
         } else {
             // Decrement attempts
             self.decrement_attempts(otp_data);
-            Ok(false)
+            Err(AuthError::OtpInvalid)
         }
     }
 
