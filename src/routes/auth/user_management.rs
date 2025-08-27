@@ -215,7 +215,7 @@ pub async fn update_user_verification(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 
@@ -263,7 +263,7 @@ pub async fn lock_user_account(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 
@@ -334,7 +334,7 @@ pub async fn get_user_statistics(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 

@@ -127,10 +127,12 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::UserRole;
+
     user_roles (id) {
         id -> Uuid,
-        #[max_length = 100]
-        name -> Varchar,
+        name -> UserRole,
         #[max_length = 500]
         description -> Nullable<Varchar>,
         permissions -> Jsonb,

@@ -1,9 +1,9 @@
 -- Create custom ENUM types
-CREATE TYPE user_role AS ENUM ('superadmin', 'admin', 'moderator', 'user', 'guest');
+CREATE TYPE user_role AS ENUM ('super_admin', 'admin', 'moderator', 'user', 'guest');
 
-CREATE TYPE account_status AS ENUM ('active', 'suspended', 'banned', 'pendingverification', 'deactivated');
+CREATE TYPE account_status AS ENUM ('active', 'suspended', 'banned', 'pending_verification', 'deactivated');
 
-CREATE TYPE otp_type AS ENUM ('emailverification', 'passwordreset', 'loginverification', 'twofactor', 'phoneverification');
+CREATE TYPE otp_type AS ENUM ('email_verification', 'password_reset', 'login_verification', 'two_factor', 'phone_verification');
 
 -- Create users table
 CREATE TABLE users (
@@ -23,7 +23,7 @@ CREATE TABLE users (
     last_login_ip VARCHAR(45),
     failed_login_attempts INTEGER NOT NULL DEFAULT 0,
     locked_until TIMESTAMPTZ,
-    account_status account_status NOT NULL DEFAULT 'pendingverification',
+    account_status account_status NOT NULL DEFAULT 'pending_verification',
     avatar VARCHAR(255),
     avatar_thumbnail VARCHAR(255),
     preferences JSONB,
@@ -211,7 +211,7 @@ INSERT INTO
         is_default
     )
 VALUES (
-        'superadmin',
+        'super_admin',
         'Super Administrator with full system access',
         '{"all": true}',
         false
@@ -257,7 +257,7 @@ VALUES (
         'admin@example.com',
         '$argon2id$v=19$m=65536,t=3,p=1$YWRtaW4xMjM$hashed_password_here',
         'Super Admin',
-        'superadmin',
+        'super_admin',
         true,
         'active'
     );

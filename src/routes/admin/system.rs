@@ -331,7 +331,7 @@ pub async fn initialize_system_settings(
             registration_enabled: true,
             email_verification_required: true,
             two_factor_required: false,
-            two_factor_required_roles: vec!["admin".to_string(), "superadmin".to_string()],
+            two_factor_required_roles: vec!["admin".to_string(), "super_admin".to_string()],
             max_login_attempts: 5,
             session_timeout_minutes: 1440,
             database_status: "unknown".to_string(),

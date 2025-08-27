@@ -203,7 +203,7 @@ impl AppConfig {
                     .unwrap_or(5),
             },
             two_factor_required_roles: std::env::var("APP_TWO_FACTOR__REQUIRED_ROLES")
-                .unwrap_or_else(|_| "admin,superadmin".to_string())
+                .unwrap_or_else(|_| "admin,super_admin".to_string())
                 .split(',')
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
@@ -286,7 +286,7 @@ impl Default for AppConfig {
                 timeout_seconds: 5,
             },
             frontend_url: "http://localhost:3000".to_string(),
-            two_factor_required_roles: vec!["admin".to_string(), "superadmin".to_string()],
+            two_factor_required_roles: vec!["admin".to_string(), "super_admin".to_string()],
         }
     }
 }

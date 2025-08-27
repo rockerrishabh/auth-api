@@ -180,7 +180,7 @@ APP_EMAIL__FROM_NAME=Your App Name
 ```bash
 APP_SECURITY__MAX_FAILED_ATTEMPTS=5
 APP_SECURITY__SESSION_TIMEOUT=86400
-APP_TWO_FACTOR__REQUIRED_ROLES=admin,superadmin
+APP_TWO_FACTOR__REQUIRED_ROLES=admin,super_admin
 ```
 
 **Note:** `APP_TWO_FACTOR__REQUIRED_ROLES` is a comma-separated list of user roles that require 2FA. Users with these roles must enable 2FA before they can log in. This provides an additional security layer for sensitive accounts.
@@ -638,7 +638,7 @@ diesel print-schema
 
 - **Account Lockout** after failed attempts
 - **Two-Factor Authentication** with role-based requirements
-- **Role-Based 2FA Enforcement** (admin, superadmin)
+- **Role-Based 2FA Enforcement** (admin, super_admin)
 - **Email Verification** required
 - **Session Management** with expiration
 - **Audit Logging** for compliance

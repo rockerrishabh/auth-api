@@ -22,7 +22,7 @@ pub async fn get_session_statistics(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 

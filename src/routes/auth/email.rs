@@ -83,7 +83,7 @@ pub async fn send_email(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 
@@ -125,7 +125,7 @@ pub async fn send_welcome_email(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 
@@ -174,7 +174,7 @@ pub async fn send_security_alert_email(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 
@@ -223,7 +223,7 @@ pub async fn test_otp_email(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if _current_user.role != "admin" && _current_user.role != "superadmin" {
+    if _current_user.role != "admin" && _current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 

@@ -109,7 +109,7 @@ pub async fn get_recent_activities(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 
@@ -143,7 +143,7 @@ pub async fn get_activity_summary(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 
@@ -172,7 +172,7 @@ pub async fn get_logins_today(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 
@@ -201,7 +201,7 @@ pub async fn get_logins_week(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 
@@ -230,7 +230,7 @@ pub async fn get_logins_month(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 
@@ -259,7 +259,7 @@ pub async fn get_failed_login_attempts(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 
@@ -290,7 +290,7 @@ pub async fn get_user_audit_logs(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
-    if current_user.role != "admin" && current_user.role != "superadmin" {
+    if current_user.role != "admin" && current_user.role != "super_admin" {
         return Err(crate::error::AuthError::InsufficientPermissions);
     }
 
