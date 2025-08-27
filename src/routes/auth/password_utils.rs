@@ -1,5 +1,5 @@
 use crate::{error::AuthResult, services::core::password::PasswordService};
-use actix_web::{get, post, web, HttpResponse};
+use actix_web::{post, web, HttpResponse};
 use serde::{Deserialize, Serialize};
 
 use validator::Validate;
@@ -73,24 +73,6 @@ pub async fn generate_secure_password(
 
     Ok(HttpResponse::Ok().json(PasswordGenerationResponse {
         password: password.clone(),
-        length,
-        strength: format!("{:?}", validation.strength).to_lowercase(),
-    }))
-}
-
-#[get("/generate-memorable")]
-pub async fn generate_memorable_password(
-    config: web::Data<crate::config::AppConfig>,
-) -> AuthResult<HttpResponse> {
-    let password_service = PasswordService::new(config.get_ref().clone());
-    let password = password_service.generate_memorable_password(3); // 3 words
-    let length = password.len();
-
-    // Validate the generated password
-    let validation = password_service.validate_password_strength(&password);
-
-    Ok(HttpResponse::Ok().json(PasswordGenerationResponse {
-        password,
         length,
         strength: format!("{:?}", validation.strength).to_lowercase(),
     }))

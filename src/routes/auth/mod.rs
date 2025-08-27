@@ -100,7 +100,6 @@ pub fn configure_auth_routes(cfg: &mut web::ServiceConfig, auth_middleware: Auth
                         web::scope("/password")
                             .service(password_utils::validate_password_strength)
                             .service(password_utils::generate_secure_password)
-                            .service(password_utils::generate_memorable_password)
                             .service(password_utils::hash_password)
                             .service(password_utils::hash_and_validate_password),
                     )
