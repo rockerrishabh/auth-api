@@ -37,7 +37,7 @@ tracing-subscriber = "0.3.19"
 tracing = "0.1.41"
 
 [features]
-default = []
+default = ["avif-encoding"]
 avif-encoding = ["ravif"]
 
 [dev-dependencies]

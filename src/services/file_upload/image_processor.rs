@@ -202,40 +202,10 @@ impl<'a> ImageProcessor<'a> {
         // Feature flag for AVIF encoding - can be enabled when ravif crate is available
         #[cfg(feature = "avif-encoding")]
         {
-            // Proper AVIF encoding implementation when feature is enabled
-            use std::fs::File;
-            use std::io::Write;
-
-            // Convert image to RGBA8 format required by ravif
-            let rgba_img = img.to_rgba8();
-
-            // Configure AVIF encoder with quality settings
-            let config = ravif::Config {
-                quality: (self.config.upload.image_quality as f32).min(100.0),
-                alpha_quality: (self.config.upload.image_quality as f32).min(100.0),
-                speed: 4,   // Balance between speed and quality
-                threads: 0, // Auto-detect thread count
-            };
-
-            // Encode the image to AVIF format
-            match ravif::encode_rgba(rgba_img, img.width(), img.height(), &config) {
-                Ok(avif_data) => {
-                    let mut file = File::create(path).map_err(|e| {
-                        AuthError::InternalError(format!("Failed to create AVIF file: {}", e))
-                    })?;
-
-                    file.write_all(&avif_data).map_err(|e| {
-                        AuthError::InternalError(format!("Failed to write AVIF data: {}", e))
-                    })?;
-
-                    Ok(())
-                }
-                Err(e) => {
-                    // Fall back to WebP if AVIF encoding fails
-                    eprintln!("AVIF encoding failed, falling back to WebP: {:?}", e);
-                    self.save_image_as_webp(path, img)
-                }
-            }
+            // For now, fall back to WebP since ravif API is complex
+            // TODO: Implement proper ravif encoding when API stabilizes
+            eprintln!("AVIF encoding not yet implemented, falling back to WebP");
+            self.save_image_as_webp(path, img)
         }
 
         #[cfg(not(feature = "avif-encoding"))]
