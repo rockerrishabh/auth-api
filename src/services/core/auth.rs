@@ -168,6 +168,15 @@ impl AuthService {
             .or_filter(users::username.eq(&request.email))
             .first::<User>(&mut conn)?;
 
+        // Check if account is actually locked (not just unverified)
+        if user.is_locked() {
+            // Update failed login attempts even for locked accounts
+            self.user_service
+                .update_user_failed_attempts(user.id, 1)
+                .await?;
+            return Err(AuthError::AccountLocked);
+        }
+
         // Check if email is verified (if email verification is required)
         if self
             .config
@@ -176,15 +185,6 @@ impl AuthService {
             && user.email_verified_at.is_none()
         {
             return Err(AuthError::AccountNotVerified);
-        }
-
-        // Check if account is already locked before password verification
-        if !user.can_login() {
-            // Update failed login attempts even for locked accounts
-            self.user_service
-                .update_user_failed_attempts(user.id, 1)
-                .await?;
-            return Err(AuthError::AccountLocked);
         }
 
         // Verify password
@@ -235,6 +235,13 @@ impl AuthService {
                 .update_user_failed_attempts(user.id, 1)
                 .await?;
             return Err(AuthError::InvalidCredentials);
+        }
+
+        // Reset failed login attempts on successful password verification
+        if user.failed_login_attempts > 0 {
+            self.user_service
+                .reset_user_failed_attempts(user.id)
+                .await?;
         }
 
         // Check if 2FA is required for user's role or if user has 2FA enabled
@@ -298,13 +305,6 @@ impl AuthService {
                 }
             }
 
-            // Reset failed login attempts on successful password verification
-            if user.failed_login_attempts > 0 {
-                self.user_service
-                    .reset_user_failed_attempts(user.id)
-                    .await?;
-            }
-
             // Log 2FA initiation activity
             let activity_request = crate::services::activity::ActivityLogRequest {
                 user_id: user.id,
@@ -328,13 +328,6 @@ impl AuthService {
                 expires_in: 0,
                 session_token: "".to_string(),
             });
-        }
-
-        // Reset failed login attempts on successful login (no 2FA)
-        if user.failed_login_attempts > 0 {
-            self.user_service
-                .reset_user_failed_attempts(user.id)
-                .await?;
         }
 
         // Generate token pair using the unified method

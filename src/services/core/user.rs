@@ -876,4 +876,43 @@ impl UserService {
 
         Ok(())
     }
+
+    /// Unlock user account and reset failed login attempts
+    pub async fn unlock_user_account(&self, user_id: Uuid) -> AuthResult<()> {
+        let mut conn = self
+            .db_pool
+            .get()
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
+
+        diesel::update(users::table.filter(users::id.eq(user_id)))
+            .set((
+                users::locked_until.eq(None::<DateTime<Utc>>),
+                users::failed_login_attempts.eq(0),
+                users::updated_at.eq(Utc::now()),
+            ))
+            .execute(&mut conn)
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Force unlock all accounts that are past their lockout duration
+    pub async fn unlock_expired_accounts(&self) -> AuthResult<u64> {
+        let mut conn = self
+            .db_pool
+            .get()
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
+
+        let now = Utc::now();
+        let result = diesel::update(users::table.filter(users::locked_until.lt(now)))
+            .set((
+                users::locked_until.eq(None::<DateTime<Utc>>),
+                users::failed_login_attempts.eq(0),
+                users::updated_at.eq(now),
+            ))
+            .execute(&mut conn)
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
+
+        Ok(result as u64)
+    }
 }

@@ -289,10 +289,17 @@ pub struct NewUserRoleAssignment {
 
 // Implementations
 impl User {
+    /// Check if user can login (account is active and not locked)
     pub fn can_login(&self) -> bool {
         self.account_status == AccountStatus::Active && !self.is_locked()
     }
 
+    /// Check if user can attempt login (not locked, regardless of verification status)
+    pub fn can_attempt_login(&self) -> bool {
+        !self.is_locked()
+    }
+
+    /// Check if account is locked due to failed attempts
     pub fn is_locked(&self) -> bool {
         if let Some(locked_until) = self.locked_until {
             locked_until > Utc::now()

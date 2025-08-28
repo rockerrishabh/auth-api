@@ -70,6 +70,9 @@ pub fn configure_auth_routes(cfg: &mut web::ServiceConfig, auth_middleware: Auth
                             .service(user_management::update_user_avatar)
                             .service(user_management::update_user_verification)
                             .service(user_management::lock_user_account)
+                            .service(user_management::unlock_user_account)
+                            .service(user_management::unlock_expired_accounts)
+                            .service(user_management::verify_user_email)
                             .service(user_management::get_user_statistics)
                             .service(user_management::search_users),
                     )

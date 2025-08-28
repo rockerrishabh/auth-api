@@ -51,6 +51,18 @@ pub struct LockUserAccountRequest {
     pub reason: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Validate)]
+pub struct UnlockUserAccountRequest {
+    #[validate(length(min = 36, max = 36))]
+    pub user_id: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct VerifyUserEmailRequest {
+    #[validate(length(min = 36, max = 36))]
+    pub user_id: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct UserManagementResponse {
     pub message: String,
@@ -315,6 +327,100 @@ pub async fn lock_user_account(
             "User account {} successfully",
             if locked_value { "locked" } else { "unlocked" }
         ),
+        success: true,
+    }))
+}
+
+#[post("/unlock-account")]
+pub async fn unlock_user_account(
+    pool: web::Data<DbPool>,
+    req: web::Json<UnlockUserAccountRequest>,
+    http_req: HttpRequest,
+) -> AuthResult<HttpResponse> {
+    // Admin only endpoint
+    let current_user_id = extract_user_id_from_request(&http_req)
+        .map_err(|_| crate::error::AuthError::InvalidToken)?;
+
+    let user_service = UserService::new(pool.get_ref().clone());
+    let current_user = user_service
+        .get_user_by_id(current_user_id)
+        .await?
+        .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    if current_user.role != "admin" && current_user.role != "super_admin" {
+        return Err(crate::error::AuthError::InsufficientPermissions);
+    }
+
+    let target_user_id = Uuid::parse_str(&req.user_id).map_err(|_| {
+        crate::error::AuthError::ValidationFailed("invalid user_id format".to_string())
+    })?;
+
+    user_service.unlock_user_account(target_user_id).await?;
+
+    Ok(HttpResponse::Ok().json(UserManagementResponse {
+        message: "User account unlocked successfully".to_string(),
+        success: true,
+    }))
+}
+
+#[post("/unlock-expired-accounts")]
+pub async fn unlock_expired_accounts(
+    pool: web::Data<DbPool>,
+    http_req: HttpRequest,
+) -> AuthResult<HttpResponse> {
+    // Admin only endpoint
+    let current_user_id = extract_user_id_from_request(&http_req)
+        .map_err(|_| crate::error::AuthError::InvalidToken)?;
+
+    let user_service = UserService::new(pool.get_ref().clone());
+    let current_user = user_service
+        .get_user_by_id(current_user_id)
+        .await?
+        .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    if current_user.role != "admin" && current_user.role != "super_admin" {
+        return Err(crate::error::AuthError::InsufficientPermissions);
+    }
+
+    let unlocked_count = user_service.unlock_expired_accounts().await?;
+
+    Ok(HttpResponse::Ok().json(UserManagementResponse {
+        message: format!("{} expired accounts unlocked successfully", unlocked_count),
+        success: true,
+    }))
+}
+
+#[post("/verify-email")]
+pub async fn verify_user_email(
+    pool: web::Data<DbPool>,
+    req: web::Json<VerifyUserEmailRequest>,
+    http_req: HttpRequest,
+) -> AuthResult<HttpResponse> {
+    // Admin only endpoint
+    let current_user_id = extract_user_id_from_request(&http_req)
+        .map_err(|_| crate::error::AuthError::InvalidToken)?;
+
+    let user_service = UserService::new(pool.get_ref().clone());
+    let current_user = user_service
+        .get_user_by_id(current_user_id)
+        .await?
+        .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    if current_user.role != "admin" && current_user.role != "super_admin" {
+        return Err(crate::error::AuthError::InsufficientPermissions);
+    }
+
+    let target_user_id = Uuid::parse_str(&req.user_id).map_err(|_| {
+        crate::error::AuthError::ValidationFailed("invalid user_id format".to_string())
+    })?;
+
+    // Verify the user's email
+    user_service
+        .update_user_verification(target_user_id, Some(Utc::now()), None)
+        .await?;
+
+    Ok(HttpResponse::Ok().json(UserManagementResponse {
+        message: "User email verified successfully".to_string(),
         success: true,
     }))
 }
