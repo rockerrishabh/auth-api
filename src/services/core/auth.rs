@@ -191,13 +191,21 @@ impl AuthService {
         if let Some(password_hash) = &user.password_hash {
             if !self.verify_password(&request.password, password_hash)? {
                 // Update failed login attempts
-                let new_attempts = user.failed_login_attempts + 1;
                 self.user_service
                     .update_user_failed_attempts(user.id, 1)
                     .await?;
 
+                // Get the updated user to check the new failed attempts count
+                let updated_user = self
+                    .user_service
+                    .get_user_by_id(user.id)
+                    .await?
+                    .ok_or(AuthError::UserNotFound)?;
+
                 // Check if account should be locked due to too many failed attempts
-                if new_attempts >= self.config.security.max_failed_attempts as i32 {
+                if updated_user.failed_login_attempts
+                    >= self.config.security.max_failed_attempts as i32
+                {
                     let lock_until = Utc::now()
                         + chrono::Duration::seconds(self.config.security.lockout_duration as i64);
                     self.user_service
@@ -210,12 +218,12 @@ impl AuthService {
                         activity_type: "account_lockout".to_string(),
                         description: format!(
                             "Account locked due to {} failed login attempts",
-                            new_attempts
+                            updated_user.failed_login_attempts
                         ),
                         ip_address: Some(extract_ip_address(http_req)),
                         user_agent: Some(extract_user_agent(http_req)),
                         metadata: Some(serde_json::json!({
-                            "failed_attempts": new_attempts,
+                            "failed_attempts": updated_user.failed_login_attempts,
                             "max_attempts": self.config.security.max_failed_attempts,
                             "lockout_duration_seconds": self.config.security.lockout_duration
                         })),

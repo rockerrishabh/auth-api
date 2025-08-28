@@ -284,15 +284,22 @@ impl UserService {
     pub async fn update_user_failed_attempts(
         &self,
         user_id: Uuid,
-        failed_attempts: i32,
+        increment_by: i32,
     ) -> AuthResult<UserResponse> {
         let mut conn = self
             .db_pool
             .get()
             .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
 
+        // First get the current user to see the current failed attempts
+        let current_user = users::table
+            .filter(users::id.eq(user_id))
+            .first::<User>(&mut conn)?;
+
+        let new_attempts = current_user.failed_login_attempts + increment_by;
+
         let updated_user = diesel::update(users.filter(id.eq(user_id)))
-            .set(failed_login_attempts.eq(failed_attempts))
+            .set(failed_login_attempts.eq(new_attempts))
             .get_result::<User>(&mut conn)?;
 
         Ok(updated_user.into())
