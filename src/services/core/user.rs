@@ -17,6 +17,7 @@ use crate::db::schemas::users::dsl::*;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserResponse {
     pub id: Uuid,
+    pub name: String,
     pub email: String,
     pub username: String,
     pub role: String,
@@ -40,6 +41,7 @@ impl From<User> for UserResponse {
     fn from(user: User) -> Self {
         Self {
             id: user.id,
+            name: user.name,
             email: user.email,
             username: user.username,
             role: format!("{:?}", user.role).to_lowercase(),

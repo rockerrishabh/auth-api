@@ -311,6 +311,7 @@ impl User {
     pub fn to_response(&self) -> UserResponse {
         UserResponse {
             id: self.id,
+            name: self.name.clone(),
             username: self.username.clone(),
             email: self.email.clone(),
             role: format!("{:?}", self.role).to_lowercase(),
