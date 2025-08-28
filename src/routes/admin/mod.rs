@@ -233,7 +233,14 @@ pub fn configure_admin_routes(
                     .service(users::get_user_statistics)
                     .service(users::export_users)
                     .service(users::get_user_preferences)
-                    .service(users::update_user_preferences),
+                    .service(users::update_user_preferences)
+                    .service(users::admin_update_user_email)
+                    .service(users::admin_update_user_phone)
+                    .service(users::admin_update_user_name)
+                    .service(users::admin_update_user_avatar)
+                    .service(users::admin_update_user_verification)
+                    .service(users::admin_lock_user_account)
+                    .service(users::admin_unlock_user_account),
             )
             .service(web::scope("/sessions").service(session_management::get_session_statistics))
             .service(

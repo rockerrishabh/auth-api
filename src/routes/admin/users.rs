@@ -6,6 +6,7 @@ use actix_web::{get, post, put, web, HttpRequest, HttpResponse};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use uuid::Uuid;
 use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
@@ -51,6 +52,55 @@ pub struct BulkUpdateUsersRequest {
     pub status: Option<String>,
     pub email_verified: Option<bool>,
     pub two_factor_enabled: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct AdminUpdateUserEmailRequest {
+    #[validate(email(message = "Invalid email format"))]
+    pub new_email: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct AdminUpdateUserPhoneRequest {
+    #[validate(length(
+        min = 10,
+        max = 15,
+        message = "Phone number must be between 10 and 15 characters"
+    ))]
+    pub phone: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct AdminUpdateUserNameRequest {
+    #[validate(length(
+        min = 2,
+        max = 100,
+        message = "Name must be between 2 and 100 characters"
+    ))]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct AdminUpdateUserAvatarRequest {
+    #[validate(length(min = 1, message = "Avatar path is required"))]
+    pub avatar_path: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct AdminUpdateUserVerificationRequest {
+    pub email_verified: bool,
+    pub phone_verified: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct AdminLockUserAccountRequest {
+    pub lock_until: Option<String>, // ISO date string
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct AdminUnlockUserAccountRequest {
+    pub reason: Option<String>,
 }
 
 /// Search and filter users with advanced options
@@ -358,5 +408,301 @@ pub async fn update_user_preferences(
         "message": "User preferences updated successfully",
         "user_id": user_id_value,
         "preferences": updated_user.preferences
+    })))
+}
+
+/// Admin endpoint to update user email
+#[put("/{user_id}/email")]
+pub async fn admin_update_user_email(
+    pool: web::Data<DbPool>,
+    user_id: web::Path<String>,
+    req: web::Json<AdminUpdateUserEmailRequest>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, crate::error::AuthError> {
+    req.validate()
+        .map_err(|e| crate::error::AuthError::ValidationFailed(e.to_string()))?;
+
+    // Verify admin permissions from JWT token
+    let current_user_id = crate::middleware::extract_user_id_from_request(&http_req)
+        .map_err(|_| crate::error::AuthError::InvalidToken)?;
+
+    let user_service = UserService::new(pool.get_ref().clone());
+    let current_user = user_service
+        .get_user_by_id(current_user_id)
+        .await?
+        .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    if current_user.role != "admin" && current_user.role != "super_admin" {
+        return Err(crate::error::AuthError::InsufficientPermissions);
+    }
+
+    let user_id_uuid = user_id.parse::<Uuid>().map_err(|_| {
+        crate::error::AuthError::ValidationFailed("Invalid user ID format".to_string())
+    })?;
+
+    let updated_user = user_service
+        .update_user_email(user_id_uuid, &req.new_email)
+        .await?;
+
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "User email updated successfully",
+        "success": true,
+        "user": updated_user
+    })))
+}
+
+/// Admin endpoint to update user phone
+#[put("/{user_id}/phone")]
+pub async fn admin_update_user_phone(
+    pool: web::Data<DbPool>,
+    user_id: web::Path<String>,
+    req: web::Json<AdminUpdateUserPhoneRequest>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, crate::error::AuthError> {
+    req.validate()
+        .map_err(|e| crate::error::AuthError::ValidationFailed(e.to_string()))?;
+
+    // Verify admin permissions from JWT token
+    let current_user_id = crate::middleware::extract_user_id_from_request(&http_req)
+        .map_err(|_| crate::error::AuthError::InvalidToken)?;
+
+    let user_service = UserService::new(pool.get_ref().clone());
+    let current_user = user_service
+        .get_user_by_id(current_user_id)
+        .await?
+        .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    if current_user.role != "admin" && current_user.role != "super_admin" {
+        return Err(crate::error::AuthError::InsufficientPermissions);
+    }
+
+    let user_id_uuid = user_id.parse::<Uuid>().map_err(|_| {
+        crate::error::AuthError::ValidationFailed("Invalid user ID format".to_string())
+    })?;
+
+    let updated_user = user_service
+        .update_user_phone(user_id_uuid, &req.phone)
+        .await?;
+
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "User phone updated successfully",
+        "success": true,
+        "user": updated_user
+    })))
+}
+
+/// Admin endpoint to update user name
+#[put("/{user_id}/name")]
+pub async fn admin_update_user_name(
+    pool: web::Data<DbPool>,
+    user_id: web::Path<String>,
+    req: web::Json<AdminUpdateUserNameRequest>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, crate::error::AuthError> {
+    req.validate()
+        .map_err(|e| crate::error::AuthError::ValidationFailed(e.to_string()))?;
+
+    // Verify admin permissions from JWT token
+    let current_user_id = crate::middleware::extract_user_id_from_request(&http_req)
+        .map_err(|_| crate::error::AuthError::InvalidToken)?;
+
+    let user_service = UserService::new(pool.get_ref().clone());
+    let current_user = user_service
+        .get_user_by_id(current_user_id)
+        .await?
+        .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    if current_user.role != "admin" && current_user.role != "super_admin" {
+        return Err(crate::error::AuthError::InsufficientPermissions);
+    }
+
+    let user_id_uuid = user_id.parse::<Uuid>().map_err(|_| {
+        crate::error::AuthError::ValidationFailed("Invalid user ID format".to_string())
+    })?;
+
+    let updated_user = user_service
+        .update_user_name(user_id_uuid, &req.name)
+        .await?;
+
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "User name updated successfully",
+        "success": true,
+        "user": updated_user
+    })))
+}
+
+/// Admin endpoint to update user avatar
+#[put("/{user_id}/avatar")]
+pub async fn admin_update_user_avatar(
+    pool: web::Data<DbPool>,
+    user_id: web::Path<String>,
+    req: web::Json<AdminUpdateUserAvatarRequest>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, crate::error::AuthError> {
+    req.validate()
+        .map_err(|e| crate::error::AuthError::ValidationFailed(e.to_string()))?;
+
+    // Verify admin permissions from JWT token
+    let current_user_id = crate::middleware::extract_user_id_from_request(&http_req)
+        .map_err(|_| crate::error::AuthError::InvalidToken)?;
+
+    let user_service = UserService::new(pool.get_ref().clone());
+    let current_user = user_service
+        .get_user_by_id(current_user_id)
+        .await?
+        .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    if current_user.role != "admin" && current_user.role != "super_admin" {
+        return Err(crate::error::AuthError::InsufficientPermissions);
+    }
+
+    let user_id_uuid = user_id.parse::<Uuid>().map_err(|_| {
+        crate::error::AuthError::ValidationFailed("Invalid user ID format".to_string())
+    })?;
+
+    let updated_user = user_service
+        .update_user_avatar(user_id_uuid, &req.avatar_path)
+        .await?;
+
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "User avatar updated successfully",
+        "success": true,
+        "user": updated_user
+    })))
+}
+
+/// Admin endpoint to update user verification status
+#[put("/{user_id}/verification")]
+pub async fn admin_update_user_verification(
+    pool: web::Data<DbPool>,
+    user_id: web::Path<String>,
+    req: web::Json<AdminUpdateUserVerificationRequest>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, crate::error::AuthError> {
+    req.validate()
+        .map_err(|e| crate::error::AuthError::ValidationFailed(e.to_string()))?;
+
+    // Verify admin permissions from JWT token
+    let current_user_id = crate::middleware::extract_user_id_from_request(&http_req)
+        .map_err(|_| crate::error::AuthError::InvalidToken)?;
+
+    let user_service = UserService::new(pool.get_ref().clone());
+    let current_user = user_service
+        .get_user_by_id(current_user_id)
+        .await?
+        .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    if current_user.role != "admin" && current_user.role != "super_admin" {
+        return Err(crate::error::AuthError::InsufficientPermissions);
+    }
+
+    let user_id_uuid = user_id.parse::<Uuid>().map_err(|_| {
+        crate::error::AuthError::ValidationFailed("Invalid user ID format".to_string())
+    })?;
+
+    let email_verified_time = if req.email_verified {
+        Some(Utc::now())
+    } else {
+        None
+    };
+    let phone_verified = req.phone_verified;
+
+    let updated_user = user_service
+        .update_user_verification(user_id_uuid, email_verified_time, phone_verified)
+        .await?;
+
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "User verification status updated successfully",
+        "success": true,
+        "user": updated_user
+    })))
+}
+
+/// Admin endpoint to lock user account
+#[put("/{user_id}/lock")]
+pub async fn admin_lock_user_account(
+    pool: web::Data<DbPool>,
+    user_id: web::Path<String>,
+    req: web::Json<AdminLockUserAccountRequest>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, crate::error::AuthError> {
+    req.validate()
+        .map_err(|e| crate::error::AuthError::ValidationFailed(e.to_string()))?;
+
+    // Verify admin permissions from JWT token
+    let current_user_id = crate::middleware::extract_user_id_from_request(&http_req)
+        .map_err(|_| crate::error::AuthError::InvalidToken)?;
+
+    let user_service = UserService::new(pool.get_ref().clone());
+    let current_user = user_service
+        .get_user_by_id(current_user_id)
+        .await?
+        .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    if current_user.role != "admin" && current_user.role != "super_admin" {
+        return Err(crate::error::AuthError::InsufficientPermissions);
+    }
+
+    let user_id_uuid = user_id.parse::<Uuid>().map_err(|_| {
+        crate::error::AuthError::ValidationFailed("Invalid user ID format".to_string())
+    })?;
+
+    let lock_until = if let Some(lock_time_str) = &req.lock_until {
+        chrono::DateTime::parse_from_rfc3339(lock_time_str)
+            .map_err(|_| {
+                crate::error::AuthError::ValidationFailed("Invalid lock time format".to_string())
+            })?
+            .with_timezone(&Utc)
+    } else {
+        Utc::now() + chrono::Duration::hours(24) // Default 24 hour lock
+    };
+
+    user_service
+        .lock_user_account(user_id_uuid, Some(lock_until))
+        .await?;
+
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "User account locked successfully",
+        "success": true,
+        "lock_until": lock_until.to_rfc3339(),
+        "reason": req.reason.clone()
+    })))
+}
+
+/// Admin endpoint to unlock user account
+#[put("/{user_id}/unlock")]
+pub async fn admin_unlock_user_account(
+    pool: web::Data<DbPool>,
+    user_id: web::Path<String>,
+    req: web::Json<AdminUnlockUserAccountRequest>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse, crate::error::AuthError> {
+    req.validate()
+        .map_err(|e| crate::error::AuthError::ValidationFailed(e.to_string()))?;
+
+    // Verify admin permissions from JWT token
+    let current_user_id = crate::middleware::extract_user_id_from_request(&http_req)
+        .map_err(|_| crate::error::AuthError::InvalidToken)?;
+
+    let user_service = UserService::new(pool.get_ref().clone());
+    let current_user = user_service
+        .get_user_by_id(current_user_id)
+        .await?
+        .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    if current_user.role != "admin" && current_user.role != "super_admin" {
+        return Err(crate::error::AuthError::InsufficientPermissions);
+    }
+
+    let user_id_uuid = user_id.parse::<Uuid>().map_err(|_| {
+        crate::error::AuthError::ValidationFailed("Invalid user ID format".to_string())
+    })?;
+
+    user_service.unlock_user_account(user_id_uuid).await?;
+
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "User account unlocked successfully",
+        "success": true,
+        "reason": req.reason.clone()
     })))
 }
