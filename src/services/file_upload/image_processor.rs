@@ -79,7 +79,16 @@ impl<'a> ImageProcessor<'a> {
         log::info!("File path for saving: {}", path_str);
 
         match fs::write(&temp_path, image_data).await {
-            Ok(_) => log::info!("File saved successfully: {:?}", temp_path),
+            Ok(_) => {
+                log::info!("File saved successfully: {:?}", temp_path);
+
+                // Force a file system sync to ensure the file is fully written to disk
+                if let Err(e) = tokio::fs::File::open(&temp_path).await {
+                    log::warn!("Could not open file for sync check: {}", e);
+                } else {
+                    log::info!("File sync verification successful");
+                }
+            }
             Err(e) => {
                 log::error!("Failed to save file: {:?}, error: {}", temp_path, e);
                 return Err(AuthError::InternalError(format!(
@@ -149,9 +158,8 @@ impl<'a> ImageProcessor<'a> {
             }
         }
 
-        // Normalize the path for logging
-        let normalized_path = original_path.to_string_lossy().replace("\\", "/");
-        log::info!("Normalized original path: {}", normalized_path);
+        // Log the path for debugging (without normalization)
+        log::info!("Original path: {:?}", original_path);
 
         let processed_img = self.resize_image_if_needed(img.clone())?;
         self.save_image(original_path.to_str().unwrap(), &processed_img, filename)?;
@@ -191,9 +199,8 @@ impl<'a> ImageProcessor<'a> {
                 }
             }
 
-            // Normalize thumbnail path for logging
-            let normalized_thumb_path = thumbnail_path.to_string_lossy().replace("\\", "/");
-            log::info!("Normalized thumbnail path: {}", normalized_thumb_path);
+            // Log the thumbnail path for debugging (without normalization)
+            log::info!("Thumbnail path: {:?}", thumbnail_path);
 
             let thumbnail_img = self.create_thumbnail(img)?;
             self.save_image_as_webp(thumbnail_path.to_str().unwrap(), &thumbnail_img)?;

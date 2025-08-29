@@ -114,20 +114,11 @@ impl UploadConfig {
     pub fn get_absolute_file_path(&self, filename: &str) -> PathBuf {
         let file_path = self.get_absolute_upload_dir().join(filename);
 
-        // Normalize the path to ensure consistent slashes across platforms
-        let normalized_path = if cfg!(windows) {
-            // On Windows, convert to forward slashes for consistency
-            // This ensures the same path format is used for both saving and reading
-            PathBuf::from(file_path.to_string_lossy().replace("\\", "/"))
-        } else {
-            // On Unix/Linux, paths are already normalized
-            file_path.clone()
-        };
-
+        // Don't normalize paths for file system operations - use native format
+        // This ensures consistency between saving and reading files
         log::debug!(
-            "File path resolved: '{:?}' (normalized: '{:?}') for filename '{}' on {}",
+            "File path resolved: '{:?}' for filename '{}' on {}",
             file_path,
-            normalized_path,
             filename,
             if cfg!(windows) {
                 "Windows"
@@ -136,7 +127,7 @@ impl UploadConfig {
             }
         );
 
-        normalized_path
+        file_path
     }
 
     /// Ensure the upload directory exists and has correct permissions

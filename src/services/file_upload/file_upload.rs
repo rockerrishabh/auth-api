@@ -47,7 +47,7 @@ impl FileUploadService {
 
     /// Process image in background and update database
     pub async fn process_image_background(
-        &self,
+        self,
         user_id: uuid::Uuid,
         filename: String,
         user_service: web::Data<crate::services::core::user::UserService>,
@@ -57,6 +57,9 @@ impl FileUploadService {
         let user_service = user_service.into_inner();
 
         tokio::spawn(async move {
+            // Add a small delay to ensure file system operations are complete
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
             // Process the image
             let image_processor = super::image_processor::ImageProcessor::new(&config);
             let temp_path = config.upload.get_absolute_file_path(&filename);
@@ -67,14 +70,12 @@ impl FileUploadService {
                 temp_path
             );
 
-            // Normalize the path for comparison
-            let normalized_path = temp_path.to_string_lossy();
-            log::info!("Path for reading: {}", normalized_path);
+            // Log the path for debugging
+            log::info!("Path for reading: {:?}", temp_path);
 
             // Check if the file exists before trying to read it
             if !temp_path.exists() {
                 log::error!("File does not exist at path: {:?}", temp_path);
-                log::error!("Normalized path: {}", normalized_path);
 
                 // List directory contents to debug
                 if let Some(parent) = temp_path.parent() {
@@ -96,7 +97,17 @@ impl FileUploadService {
                         log::error!("Parent directory does not exist: {:?}", parent);
                     }
                 }
-                return;
+
+                // Try to wait a bit more and check again
+                log::info!("Waiting 500ms and checking again...");
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+                if !temp_path.exists() {
+                    log::error!("File still does not exist after waiting. Final check failed.");
+                    return;
+                } else {
+                    log::info!("File found after waiting! Proceeding with processing.");
+                }
             }
 
             // Read the saved file
