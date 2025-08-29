@@ -79,7 +79,6 @@ pub fn configure_auth_routes(cfg: &mut web::ServiceConfig, auth_middleware: Auth
                     .service(
                         web::scope("/sessions")
                             .service(session_management::get_current_session)
-                            .service(session_management::get_all_user_sessions)
                             .service(session_management::revoke_specific_session)
                             .service(session_management::revoke_other_sessions)
                             .service(session_management::get_session_count)

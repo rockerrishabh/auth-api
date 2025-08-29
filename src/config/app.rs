@@ -177,13 +177,28 @@ impl AppConfig {
                     .map_err(|_| {
                         ConfigError::Message("Invalid APP_UPLOAD__THUMBNAIL_SIZE".into())
                     })?,
-                allowed_types: std::env::var("APP_UPLOAD__ALLOWED_TYPES")
-                    .unwrap_or_else(|_| "jpg,jpeg,png,gif,webp,avif".to_string())
-                    .trim_matches(|c| c == '[' || c == ']') // Remove square brackets
-                    .split(',')
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect(),
+                allowed_types: {
+                    let types_str = std::env::var("APP_UPLOAD__ALLOWED_TYPES")
+                        .unwrap_or_else(|_| "jpg,jpeg,png,gif,webp,avif".to_string());
+
+                    // Handle both JSON array format ["jpg","jpeg","png"] and comma-separated format
+                    if types_str.starts_with('[') && types_str.ends_with(']') {
+                        // JSON array format
+                        types_str
+                            .trim_matches(|c| c == '[' || c == ']')
+                            .split(',')
+                            .map(|s| s.trim_matches(|c| c == '"' || c == '\'').trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect()
+                    } else {
+                        // Comma-separated format
+                        types_str
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect()
+                    }
+                },
             },
             geo_ip: GeoIPConfig {
                 enabled: std::env::var("APP_GEO_IP__ENABLED")

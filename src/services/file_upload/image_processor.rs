@@ -36,19 +36,54 @@ impl<'a> ImageProcessor<'a> {
         let upload_dir = self.config.upload.get_absolute_upload_dir();
         log::info!("Saving file: creating upload directory: {:?}", upload_dir);
 
-        fs::create_dir_all(&upload_dir).await.map_err(|e| {
-            AuthError::InternalError(format!("Failed to create upload directory: {}", e))
-        })?;
+        // Create directory with better error handling
+        match fs::create_dir_all(&upload_dir).await {
+            Ok(_) => log::info!(
+                "Upload directory created/verified successfully: {:?}",
+                upload_dir
+            ),
+            Err(e) => {
+                log::error!(
+                    "Failed to create upload directory: {:?}, error: {}",
+                    upload_dir,
+                    e
+                );
+                return Err(AuthError::InternalError(format!(
+                    "Failed to create upload directory: {}",
+                    e
+                )));
+            }
+        }
 
         // Save the original file immediately without processing
         let temp_path = self.config.upload.get_absolute_file_path(filename);
         log::info!("Saving file: writing to path: {:?}", temp_path);
 
-        fs::write(&temp_path, image_data)
-            .await
-            .map_err(|e| AuthError::InternalError(format!("Failed to save file: {}", e)))?;
+        // Ensure the parent directory exists for the file
+        if let Some(parent) = temp_path.parent() {
+            if let Err(e) = fs::create_dir_all(parent).await {
+                log::error!(
+                    "Failed to create parent directory for file: {:?}, error: {}",
+                    parent,
+                    e
+                );
+                return Err(AuthError::InternalError(format!(
+                    "Failed to create parent directory for file: {}",
+                    e
+                )));
+            }
+        }
 
-        log::info!("File saved successfully: {:?}", temp_path);
+        match fs::write(&temp_path, image_data).await {
+            Ok(_) => log::info!("File saved successfully: {:?}", temp_path),
+            Err(e) => {
+                log::error!("Failed to save file: {:?}, error: {}", temp_path, e);
+                return Err(AuthError::InternalError(format!(
+                    "Failed to save file: {}",
+                    e
+                )));
+            }
+        }
 
         Ok(super::types::ProcessedImage {
             original_path: format!("/static/{}", filename),
@@ -68,12 +103,48 @@ impl<'a> ImageProcessor<'a> {
 
         // Ensure upload directory exists
         let upload_dir = self.config.upload.get_absolute_upload_dir();
-        fs::create_dir_all(&upload_dir).await.map_err(|e| {
-            AuthError::InternalError(format!("Failed to create upload directory: {}", e))
-        })?;
+        log::info!(
+            "Processing image: ensuring upload directory exists: {:?}",
+            upload_dir
+        );
+
+        match fs::create_dir_all(&upload_dir).await {
+            Ok(_) => log::info!(
+                "Upload directory created/verified successfully: {:?}",
+                upload_dir
+            ),
+            Err(e) => {
+                log::error!(
+                    "Failed to create upload directory: {:?}, error: {}",
+                    upload_dir,
+                    e
+                );
+                return Err(AuthError::InternalError(format!(
+                    "Failed to create upload directory: {}",
+                    e
+                )));
+            }
+        }
 
         // Save original image (resized if too large)
         let original_path = self.config.upload.get_absolute_file_path(filename);
+        log::info!("Processing image: saving original to {:?}", original_path);
+
+        // Ensure the parent directory exists for the file
+        if let Some(parent) = original_path.parent() {
+            if let Err(e) = fs::create_dir_all(parent).await {
+                log::error!(
+                    "Failed to create parent directory for file: {:?}, error: {}",
+                    parent,
+                    e
+                );
+                return Err(AuthError::InternalError(format!(
+                    "Failed to create parent directory for file: {}",
+                    e
+                )));
+            }
+        }
+
         let processed_img = self.resize_image_if_needed(img.clone())?;
         self.save_image(original_path.to_str().unwrap(), &processed_img, filename)?;
 
@@ -91,6 +162,27 @@ impl<'a> ImageProcessor<'a> {
                 .config
                 .upload
                 .get_absolute_file_path(&thumbnail_filename);
+
+            log::info!(
+                "Processing image: creating thumbnail at {:?}",
+                thumbnail_path
+            );
+
+            // Ensure the parent directory exists for the thumbnail
+            if let Some(parent) = thumbnail_path.parent() {
+                if let Err(e) = fs::create_dir_all(parent).await {
+                    log::error!(
+                        "Failed to create parent directory for thumbnail: {:?}, error: {}",
+                        parent,
+                        e
+                    );
+                    return Err(AuthError::InternalError(format!(
+                        "Failed to create parent directory for thumbnail: {}",
+                        e
+                    )));
+                }
+            }
+
             let thumbnail_img = self.create_thumbnail(img)?;
             self.save_image_as_webp(thumbnail_path.to_str().unwrap(), &thumbnail_img)?;
             thumbnail_filename

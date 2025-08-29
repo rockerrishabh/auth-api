@@ -19,6 +19,7 @@ use crate::db::establish_connection;
 use crate::middleware::RateLimitMiddleware;
 use crate::routes::configure_routes_simple;
 use actix_files as fs;
+use std::path::PathBuf;
 use std::time::Duration;
 
 #[actix_web::main]
@@ -117,6 +118,28 @@ async fn main() -> std::io::Result<()> {
     // Create HTTP server
     let config_data = web::Data::new(config.clone());
     let db_pool_data = web::Data::new(db_pool.clone());
+
+    // Log upload configuration for debugging
+    info!("Upload configuration:");
+    info!(
+        "  Directory: {} (absolute: {:?})",
+        config.upload.dir,
+        config.upload.get_absolute_upload_dir()
+    );
+    info!("  Max size: {} bytes", config.upload.max_size);
+    info!(
+        "  Image max dimensions: {}x{}",
+        config.upload.image_max_width, config.upload.image_max_height
+    );
+    info!(
+        "  Generate thumbnails: {}",
+        config.upload.generate_thumbnails
+    );
+    info!("  Allowed types: {:?}", config.upload.allowed_types);
+    info!(
+        "  Current working directory: {:?}",
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("unknown"))
+    );
 
     HttpServer::new(move || {
         App::new()

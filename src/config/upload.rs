@@ -25,17 +25,32 @@ impl UploadConfig {
         let path = PathBuf::from(&self.dir);
         if path.is_relative() {
             // Resolve relative path to absolute path from current working directory
-            std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .join(path)
+            let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+            // Log the path resolution for debugging
+            log::info!(
+                "Upload config: relative path '{}' resolved to absolute path '{:?}' from current dir '{:?}'",
+                self.dir,
+                current_dir.join(&path),
+                current_dir
+            );
+
+            current_dir.join(path)
         } else {
+            log::info!("Upload config: using absolute path '{:?}'", path);
             path
         }
     }
 
     /// Get the absolute path for a file in the upload directory
     pub fn get_absolute_file_path(&self, filename: &str) -> PathBuf {
-        self.get_absolute_upload_dir().join(filename)
+        let file_path = self.get_absolute_upload_dir().join(filename);
+        log::debug!(
+            "File path resolved: '{:?}' for filename '{}'",
+            file_path,
+            filename
+        );
+        file_path
     }
 }
 

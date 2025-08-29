@@ -18,14 +18,23 @@ pub async fn upload_avatar(
     let user_id =
         extract_user_id_from_request(&req).map_err(|_| crate::error::AuthError::InvalidToken)?;
 
+    log::info!("Avatar upload started for user: {}", user_id);
+
     // Create services
     let file_upload_service = FileUploadService::new(config.get_ref().clone());
     let user_service = UserService::new(pool.get_ref().clone());
 
     // Save the uploaded file immediately and get temporary paths
+    log::info!("Saving uploaded file...");
     let temp_image = file_upload_service.save_uploaded_file(payload).await?;
+    log::info!(
+        "File saved successfully. Original path: {}, Thumbnail path: {}",
+        temp_image.original_path,
+        temp_image.thumbnail_path
+    );
 
     // Update user with temporary paths immediately
+    log::info!("Updating user avatar in database...");
     user_service
         .update_user_avatar(user_id, &temp_image.original_path)
         .await?;
@@ -40,6 +49,8 @@ pub async fn upload_avatar(
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
 
+    log::info!("User avatar updated in database. Starting background processing...");
+
     // Process image in background (fire and forget)
     let config_clone = config.get_ref().clone();
     let pool_clone = pool.get_ref().clone();
@@ -47,6 +58,11 @@ pub async fn upload_avatar(
     let temp_original_path = temp_image.original_path.clone();
 
     tokio::spawn(async move {
+        log::info!(
+            "Background image processing started for user: {}",
+            user_id_clone
+        );
+
         // Delete old avatar files if they exist
         let file_upload_service = FileUploadService::new(config_clone);
         let user_service = UserService::new(pool_clone);
@@ -54,6 +70,7 @@ pub async fn upload_avatar(
         if let Ok(Some(current_user)) = user_service.get_user_by_id(user_id_clone).await {
             if let Some(old_avatar) = &current_user.avatar {
                 if let Some(old_thumbnail) = &current_user.avatar_thumbnail {
+                    log::info!("Deleting old avatar files for user: {}", user_id_clone);
                     let _ = file_upload_service
                         .delete_old_avatars(old_avatar, old_thumbnail)
                         .await;
@@ -62,6 +79,7 @@ pub async fn upload_avatar(
         }
 
         // Process the image in background
+        log::info!("Processing image in background for user: {}", user_id_clone);
         file_upload_service
             .process_image_background(
                 user_id_clone,
@@ -75,5 +93,6 @@ pub async fn upload_avatar(
             .await;
     });
 
+    log::info!("Avatar upload completed successfully for user: {}", user_id);
     Ok(HttpResponse::Ok().json(updated_user))
 }
