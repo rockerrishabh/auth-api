@@ -177,14 +177,21 @@ impl AppConfig {
                     .map_err(|_| {
                         ConfigError::Message("Invalid APP_UPLOAD__THUMBNAIL_SIZE".into())
                     })?,
-                allowed_types: vec![
-                    "jpg".to_string(),
-                    "jpeg".to_string(),
-                    "png".to_string(),
-                    "gif".to_string(),
-                    "webp".to_string(),
-                    "avif".to_string(),
-                ],
+                allowed_types: {
+                    let env_value = std::env::var("APP_UPLOAD__ALLOWED_TYPES");
+                    println!("DEBUG: APP_UPLOAD__ALLOWED_TYPES env var: {:?}", env_value);
+                    let default_value = "jpg,jpeg,png,gif,webp,avif".to_string();
+                    let final_value = env_value.unwrap_or_else(|_| default_value.clone());
+                    println!("DEBUG: Final allowed_types value: {:?}", final_value);
+                    let types: Vec<String> = final_value
+                        .trim_matches(|c| c == '[' || c == ']') // Remove square brackets
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    println!("DEBUG: Parsed allowed_types: {:?}", types);
+                    types
+                },
             },
             geo_ip: GeoIPConfig {
                 enabled: std::env::var("APP_GEO_IP__ENABLED")

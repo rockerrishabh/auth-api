@@ -75,11 +75,30 @@ impl<'a> FileValidator<'a> {
             // Check if the content type is in the allowed types configuration
             let content_type_without_prefix = ct.strip_prefix("image/").unwrap_or(ct);
 
+            // Debug logging
+            println!("DEBUG: Content type: {:?}", ct);
+            println!(
+                "DEBUG: Content type without prefix: {:?}",
+                content_type_without_prefix
+            );
+            println!(
+                "DEBUG: Allowed types: {:?}",
+                self.config.upload.allowed_types
+            );
+            println!(
+                "DEBUG: Contains check result: {}",
+                self.config
+                    .upload
+                    .allowed_types
+                    .contains(&content_type_without_prefix.to_string())
+            );
+
             self.config
                 .upload
                 .allowed_types
                 .contains(&content_type_without_prefix.to_string())
         } else {
+            println!("DEBUG: No content type provided");
             false
         }
     }
