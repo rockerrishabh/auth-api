@@ -5,6 +5,7 @@ use crate::{
 };
 use actix_multipart::Multipart;
 use actix_web::{post, web, HttpRequest, HttpResponse};
+use tokio;
 
 #[post("/avatar")]
 pub async fn upload_avatar(
@@ -21,38 +22,58 @@ pub async fn upload_avatar(
     let file_upload_service = FileUploadService::new(config.get_ref().clone());
     let user_service = UserService::new(pool.get_ref().clone());
 
-    // Get current user to check for existing avatar
-    let current_user = user_service
-        .get_user_by_id(user_id)
-        .await?
-        .ok_or(crate::error::AuthError::UserNotFound)?;
+    // Save the uploaded file immediately and get temporary paths
+    let temp_image = file_upload_service.save_uploaded_file(payload).await?;
 
-    // Process the uploaded avatar
-    let processed_image = file_upload_service.process_avatar(payload).await?;
-
-    // Delete old avatar files if they exist
-    if let Some(old_avatar) = &current_user.avatar {
-        if let Some(old_thumbnail) = &current_user.avatar_thumbnail {
-            file_upload_service
-                .delete_old_avatars(old_avatar, old_thumbnail)
-                .await?;
-        }
-    }
-
-    // Update user with new avatar paths
+    // Update user with temporary paths immediately
     user_service
-        .update_user_avatar(user_id, &processed_image.original_path)
+        .update_user_avatar(user_id, &temp_image.original_path)
         .await?;
 
     user_service
-        .update_user_avatar_thumbnail(user_id, &processed_image.thumbnail_path)
+        .update_user_avatar_thumbnail(user_id, &temp_image.thumbnail_path)
         .await?;
 
-    // Get the updated user to return
+    // Get the updated user to return immediately
     let updated_user = user_service
         .get_user_by_id(user_id)
         .await?
         .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    // Process image in background (fire and forget)
+    let config_clone = config.get_ref().clone();
+    let pool_clone = pool.get_ref().clone();
+    let user_id_clone = user_id;
+    let temp_original_path = temp_image.original_path.clone();
+
+    tokio::spawn(async move {
+        // Delete old avatar files if they exist
+        let file_upload_service = FileUploadService::new(config_clone);
+        let user_service = UserService::new(pool_clone);
+
+        if let Ok(Some(current_user)) = user_service.get_user_by_id(user_id_clone).await {
+            if let Some(old_avatar) = &current_user.avatar {
+                if let Some(old_thumbnail) = &current_user.avatar_thumbnail {
+                    let _ = file_upload_service
+                        .delete_old_avatars(old_avatar, old_thumbnail)
+                        .await;
+                }
+            }
+        }
+
+        // Process the image in background
+        file_upload_service
+            .process_image_background(
+                user_id_clone,
+                temp_original_path
+                    .split('/')
+                    .last()
+                    .unwrap_or("")
+                    .to_string(),
+                web::Data::new(user_service),
+            )
+            .await;
+    });
 
     Ok(HttpResponse::Ok().json(updated_user))
 }

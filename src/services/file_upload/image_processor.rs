@@ -26,6 +26,31 @@ impl<'a> ImageProcessor<'a> {
         Ok(format!("{}.{}", file_id, file_extension))
     }
 
+    /// Save file immediately without processing (for fast response)
+    pub async fn save_file_immediately(
+        &self,
+        filename: &str,
+        image_data: &[u8],
+    ) -> AuthResult<super::types::ProcessedImage> {
+        // Ensure upload directory exists
+        fs::create_dir_all(&self.config.upload.dir)
+            .await
+            .map_err(|e| {
+                AuthError::InternalError(format!("Failed to create upload directory: {}", e))
+            })?;
+
+        // Save the original file immediately without processing
+        let temp_path = format!("{}/{}", self.config.upload.dir, filename);
+        fs::write(&temp_path, image_data)
+            .await
+            .map_err(|e| AuthError::InternalError(format!("Failed to save file: {}", e)))?;
+
+        Ok(super::types::ProcessedImage {
+            original_path: format!("/static/{}", filename),
+            thumbnail_path: "".to_string(), // Will be updated later
+        })
+    }
+
     /// Process and save image with optional thumbnail
     pub async fn process_and_save_image(
         &self,
