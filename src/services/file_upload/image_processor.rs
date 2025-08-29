@@ -58,6 +58,11 @@ impl<'a> ImageProcessor<'a> {
         // Save the original file immediately without processing
         let temp_path = self.config.upload.get_absolute_file_path(filename);
         log::info!("Saving file: writing to path: {:?}", temp_path);
+        log::info!(
+            "Saving file: path as string: {}",
+            temp_path.to_string_lossy()
+        );
+        log::info!("Saving file: path exists check: {}", temp_path.exists());
 
         // Ensure the parent directory exists for the file
         if let Some(parent) = temp_path.parent() {

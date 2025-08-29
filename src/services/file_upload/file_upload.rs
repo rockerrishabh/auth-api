@@ -72,6 +72,11 @@ impl FileUploadService {
 
             // Log the path for debugging
             log::info!("Path for reading: {:?}", temp_path);
+            log::info!(
+                "Path for reading (as string): {}",
+                temp_path.to_string_lossy()
+            );
+            log::info!("Path for reading (exists check): {}", temp_path.exists());
 
             // Check if the file exists before trying to read it
             if !temp_path.exists() {
@@ -104,6 +109,24 @@ impl FileUploadService {
 
                 if !temp_path.exists() {
                     log::error!("File still does not exist after waiting. Final check failed.");
+
+                    // Final directory listing for debugging
+                    if let Some(parent) = temp_path.parent() {
+                        if parent.exists() {
+                            match std::fs::read_dir(parent) {
+                                Ok(entries) => {
+                                    log::info!("Final directory contents:");
+                                    for entry in entries {
+                                        match entry {
+                                            Ok(entry) => log::info!("  {:?}", entry.path()),
+                                            Err(e) => log::error!("  Error reading entry: {}", e),
+                                        }
+                                    }
+                                }
+                                Err(e) => log::error!("Failed to read directory: {}", e),
+                            }
+                        }
+                    }
                     return;
                 } else {
                     log::info!("File found after waiting! Proceeding with processing.");

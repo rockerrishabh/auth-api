@@ -33,6 +33,15 @@ pub async fn upload_avatar(
         temp_image.thumbnail_path
     );
 
+    // Get the current user to capture old avatar paths BEFORE updating
+    let current_user = user_service
+        .get_user_by_id(user_id)
+        .await?
+        .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    let old_avatar_path = current_user.avatar.clone();
+    let old_thumbnail_path = current_user.avatar_thumbnail.clone();
+
     // Update user with temporary paths immediately
     log::info!("Updating user avatar in database...");
     user_service
@@ -56,6 +65,8 @@ pub async fn upload_avatar(
     let pool_clone = pool.get_ref().clone();
     let user_id_clone = user_id;
     let temp_original_path = temp_image.original_path.clone();
+    let old_avatar_path_clone = old_avatar_path.clone();
+    let old_thumbnail_path_clone = old_thumbnail_path.clone();
 
     tokio::spawn(async move {
         log::info!(
@@ -63,18 +74,16 @@ pub async fn upload_avatar(
             user_id_clone
         );
 
-        // Delete old avatar files if they exist
+        // Delete old avatar files if they exist (using captured old paths)
         let file_upload_service = FileUploadService::new(config_clone);
         let user_service = UserService::new(pool_clone);
 
-        if let Ok(Some(current_user)) = user_service.get_user_by_id(user_id_clone).await {
-            if let Some(old_avatar) = &current_user.avatar {
-                if let Some(old_thumbnail) = &current_user.avatar_thumbnail {
-                    log::info!("Deleting old avatar files for user: {}", user_id_clone);
-                    let _ = file_upload_service
-                        .delete_old_avatars(old_avatar, old_thumbnail)
-                        .await;
-                }
+        if let Some(old_avatar) = &old_avatar_path_clone {
+            if let Some(old_thumbnail) = &old_thumbnail_path_clone {
+                log::info!("Deleting old avatar files for user: {}", user_id_clone);
+                let _ = file_upload_service
+                    .delete_old_avatars(old_avatar, old_thumbnail)
+                    .await;
             }
         }
 
