@@ -33,17 +33,22 @@ impl<'a> ImageProcessor<'a> {
         image_data: &[u8],
     ) -> AuthResult<super::types::ProcessedImage> {
         // Ensure upload directory exists
-        fs::create_dir_all(&self.config.upload.dir)
-            .await
-            .map_err(|e| {
-                AuthError::InternalError(format!("Failed to create upload directory: {}", e))
-            })?;
+        let upload_dir = self.config.upload.get_absolute_upload_dir();
+        log::info!("Saving file: creating upload directory: {:?}", upload_dir);
+
+        fs::create_dir_all(&upload_dir).await.map_err(|e| {
+            AuthError::InternalError(format!("Failed to create upload directory: {}", e))
+        })?;
 
         // Save the original file immediately without processing
-        let temp_path = format!("{}/{}", self.config.upload.dir, filename);
+        let temp_path = self.config.upload.get_absolute_file_path(filename);
+        log::info!("Saving file: writing to path: {:?}", temp_path);
+
         fs::write(&temp_path, image_data)
             .await
             .map_err(|e| AuthError::InternalError(format!("Failed to save file: {}", e)))?;
+
+        log::info!("File saved successfully: {:?}", temp_path);
 
         Ok(super::types::ProcessedImage {
             original_path: format!("/static/{}", filename),
@@ -62,16 +67,15 @@ impl<'a> ImageProcessor<'a> {
             .map_err(|e| AuthError::InternalError(format!("Failed to load image: {}", e)))?;
 
         // Ensure upload directory exists
-        fs::create_dir_all(&self.config.upload.dir)
-            .await
-            .map_err(|e| {
-                AuthError::InternalError(format!("Failed to create upload directory: {}", e))
-            })?;
+        let upload_dir = self.config.upload.get_absolute_upload_dir();
+        fs::create_dir_all(&upload_dir).await.map_err(|e| {
+            AuthError::InternalError(format!("Failed to create upload directory: {}", e))
+        })?;
 
         // Save original image (resized if too large)
-        let original_path = format!("{}/{}", self.config.upload.dir, filename);
+        let original_path = self.config.upload.get_absolute_file_path(filename);
         let processed_img = self.resize_image_if_needed(img.clone())?;
-        self.save_image(&original_path, &processed_img, filename)?;
+        self.save_image(original_path.to_str().unwrap(), &processed_img, filename)?;
 
         // Create and save thumbnail if enabled in configuration
         let thumbnail_filename = if self.config.upload.generate_thumbnails {
@@ -83,9 +87,12 @@ impl<'a> ImageProcessor<'a> {
                 )),
                 "webp"
             );
-            let thumbnail_path = format!("{}/{}", self.config.upload.dir, thumbnail_filename);
+            let thumbnail_path = self
+                .config
+                .upload
+                .get_absolute_file_path(&thumbnail_filename);
             let thumbnail_img = self.create_thumbnail(img)?;
-            self.save_image_as_webp(&thumbnail_path, &thumbnail_img)?;
+            self.save_image_as_webp(thumbnail_path.to_str().unwrap(), &thumbnail_img)?;
             thumbnail_filename
         } else {
             "".to_string()

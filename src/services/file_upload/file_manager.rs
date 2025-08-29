@@ -23,11 +23,8 @@ impl<'a> FileManager<'a> {
         thumbnail_path: &str,
     ) -> AuthResult<()> {
         if !avatar_path.is_empty() {
-            let full_path = format!(
-                "{}/{}",
-                self.config.upload.dir,
-                avatar_path.trim_start_matches("/static/")
-            );
+            let filename = avatar_path.trim_start_matches("/static/");
+            let full_path = self.config.upload.get_absolute_file_path(filename);
             if fs::metadata(&full_path).await.is_ok() {
                 fs::remove_file(&full_path).await.map_err(|e| {
                     AuthError::InternalError(format!("Failed to delete old avatar: {}", e))
@@ -36,11 +33,8 @@ impl<'a> FileManager<'a> {
         }
 
         if !thumbnail_path.is_empty() {
-            let full_path = format!(
-                "{}/{}",
-                self.config.upload.dir,
-                thumbnail_path.trim_start_matches("/static/")
-            );
+            let filename = thumbnail_path.trim_start_matches("/static/");
+            let full_path = self.config.upload.get_absolute_file_path(filename);
             if fs::metadata(&full_path).await.is_ok() {
                 fs::remove_file(&full_path).await.map_err(|e| {
                     AuthError::InternalError(format!("Failed to delete old thumbnail: {}", e))

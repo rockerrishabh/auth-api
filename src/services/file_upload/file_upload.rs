@@ -59,13 +59,31 @@ impl FileUploadService {
         tokio::spawn(async move {
             // Process the image
             let image_processor = super::image_processor::ImageProcessor::new(&config);
-            let temp_path = format!("{}/{}", config.upload.dir, filename);
+            let temp_path = config.upload.get_absolute_file_path(&filename);
+
+            // Log the file path for debugging
+            log::info!(
+                "Background processing: attempting to read file from: {:?}",
+                temp_path
+            );
 
             // Read the saved file
             let image_data = match tokio::fs::read(&temp_path).await {
-                Ok(data) => data,
+                Ok(data) => {
+                    log::info!(
+                        "Successfully read file for processing, size: {} bytes",
+                        data.len()
+                    );
+                    data
+                }
                 Err(e) => {
                     log::error!("Failed to read saved file for processing: {}", e);
+                    log::error!("File path attempted: {:?}", temp_path);
+                    log::error!(
+                        "Current working directory: {:?}",
+                        std::env::current_dir()
+                            .unwrap_or_else(|_| std::path::PathBuf::from("unknown"))
+                    );
                     return;
                 }
             };
