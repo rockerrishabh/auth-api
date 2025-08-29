@@ -129,22 +129,6 @@ impl UploadConfig {
 
         file_path
     }
-
-    /// Ensure the upload directory exists and has correct permissions
-    pub async fn ensure_upload_directory(&self) -> std::io::Result<()> {
-        let upload_dir = self.get_absolute_upload_dir();
-
-        // Create the directory if it doesn't exist
-        if !upload_dir.exists() {
-            log::info!("Creating upload directory: {:?}", upload_dir);
-            tokio::fs::create_dir_all(&upload_dir).await?;
-            log::info!("Upload directory created successfully: {:?}", upload_dir);
-        } else {
-            log::debug!("Upload directory already exists: {:?}", upload_dir);
-        }
-
-        Ok(())
-    }
 }
 
 fn deserialize_u32<'de, D>(deserializer: D) -> Result<u32, D::Error>
