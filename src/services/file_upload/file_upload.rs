@@ -67,6 +67,38 @@ impl FileUploadService {
                 temp_path
             );
 
+            // Normalize the path for comparison
+            let normalized_path = temp_path.to_string_lossy().replace("\\", "/");
+            log::info!("Normalized path for reading: {}", normalized_path);
+
+            // Check if the file exists before trying to read it
+            if !temp_path.exists() {
+                log::error!("File does not exist at path: {:?}", temp_path);
+                log::error!("Normalized path: {}", normalized_path);
+
+                // List directory contents to debug
+                if let Some(parent) = temp_path.parent() {
+                    log::info!("Parent directory: {:?}", parent);
+                    if parent.exists() {
+                        match std::fs::read_dir(parent) {
+                            Ok(entries) => {
+                                log::info!("Directory contents:");
+                                for entry in entries {
+                                    match entry {
+                                        Ok(entry) => log::info!("  {:?}", entry.path()),
+                                        Err(e) => log::error!("  Error reading entry: {}", e),
+                                    }
+                                }
+                            }
+                            Err(e) => log::error!("Failed to read directory: {}", e),
+                        }
+                    } else {
+                        log::error!("Parent directory does not exist: {:?}", parent);
+                    }
+                }
+                return;
+            }
+
             // Read the saved file
             let image_data = match tokio::fs::read(&temp_path).await {
                 Ok(data) => {

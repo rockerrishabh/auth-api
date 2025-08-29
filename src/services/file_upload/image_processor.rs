@@ -74,6 +74,10 @@ impl<'a> ImageProcessor<'a> {
             }
         }
 
+        // Convert path to string and normalize it
+        let path_str = temp_path.to_string_lossy().replace("\\", "/");
+        log::info!("Normalized file path: {}", path_str);
+
         match fs::write(&temp_path, image_data).await {
             Ok(_) => log::info!("File saved successfully: {:?}", temp_path),
             Err(e) => {
@@ -145,6 +149,10 @@ impl<'a> ImageProcessor<'a> {
             }
         }
 
+        // Normalize the path for logging
+        let normalized_path = original_path.to_string_lossy().replace("\\", "/");
+        log::info!("Normalized original path: {}", normalized_path);
+
         let processed_img = self.resize_image_if_needed(img.clone())?;
         self.save_image(original_path.to_str().unwrap(), &processed_img, filename)?;
 
@@ -182,6 +190,10 @@ impl<'a> ImageProcessor<'a> {
                     )));
                 }
             }
+
+            // Normalize thumbnail path for logging
+            let normalized_thumb_path = thumbnail_path.to_string_lossy().replace("\\", "/");
+            log::info!("Normalized thumbnail path: {}", normalized_thumb_path);
 
             let thumbnail_img = self.create_thumbnail(img)?;
             self.save_image_as_webp(thumbnail_path.to_str().unwrap(), &thumbnail_img)?;

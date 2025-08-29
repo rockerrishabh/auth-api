@@ -35,7 +35,11 @@ impl UploadConfig {
                 current_dir
             );
 
-            current_dir.join(path)
+            // Use canonicalize to resolve the path properly and handle any symlinks
+            current_dir
+                .join(&path)
+                .canonicalize()
+                .unwrap_or_else(|_| current_dir.join(&path))
         } else {
             log::info!("Upload config: using absolute path '{:?}'", path);
             path
