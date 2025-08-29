@@ -30,13 +30,24 @@ impl<'a> FileValidator<'a> {
             if field.name() == Some(field_name) {
                 let content_type = field.content_type().map(|m| m.to_string());
 
+                // Debug logging
+                println!("DEBUG: Field name: {:?}", field.name());
+                println!("DEBUG: Content type: {:?}", content_type);
+                println!(
+                    "DEBUG: Allowed types: {:?}",
+                    self.config.upload.allowed_types
+                );
+
                 // Validate content type
                 if !self.is_valid_image_type(content_type.as_deref()) {
+                    println!("DEBUG: Content type validation failed");
                     return Err(AuthError::ValidationFailed(
                         "Invalid file type. Only JPEG, PNG, GIF, WebP, and AVIF are allowed."
                             .to_string(),
                     ));
                 }
+
+                println!("DEBUG: Content type validation passed");
 
                 // Read file data
                 let mut data = Vec::new();
