@@ -362,7 +362,10 @@ impl AuthService {
             device_info: None,
         };
 
-        let session = self.session_service.create_session(session_request).await?;
+        let session = self
+            .session_service
+            .get_or_create_session(session_request)
+            .await?;
 
         // Log activity
         let activity_request = crate::services::activity::ActivityLogRequest {
