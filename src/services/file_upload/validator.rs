@@ -30,24 +30,46 @@ impl<'a> FileValidator<'a> {
             if field.name() == Some(field_name) {
                 let content_type = field.content_type().map(|m| m.to_string());
 
-                // Debug logging
-                println!("DEBUG: Field name: {:?}", field.name());
+                // Debug logging for multipart field
+                println!("DEBUG: Processing field: {:?}", field.name());
                 println!("DEBUG: Content type: {:?}", content_type);
                 println!(
-                    "DEBUG: Allowed types: {:?}",
-                    self.config.upload.allowed_types
+                    "DEBUG: Content disposition: {:?}",
+                    field.content_disposition()
                 );
 
+                // If content type is None, try to infer from filename
+                let inferred_content_type = if content_type.is_none() {
+                    if let Some(content_disposition) = field.content_disposition() {
+                        if let Some(filename) = content_disposition.get_filename() {
+                            let extension = filename.split('.').last().unwrap_or("").to_lowercase();
+                            match extension.as_str() {
+                                "jpg" | "jpeg" => Some("image/jpeg".to_string()),
+                                "png" => Some("image/png".to_string()),
+                                "gif" => Some("image/gif".to_string()),
+                                "webp" => Some("image/webp".to_string()),
+                                "avif" => Some("image/avif".to_string()),
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    content_type
+                };
+
+                println!("DEBUG: Inferred content type: {:?}", inferred_content_type);
+
                 // Validate content type
-                if !self.is_valid_image_type(content_type.as_deref()) {
-                    println!("DEBUG: Content type validation failed");
+                if !self.is_valid_image_type(inferred_content_type.as_deref()) {
                     return Err(AuthError::ValidationFailed(
                         "Invalid file type. Only JPEG, PNG, GIF, WebP, and AVIF are allowed."
                             .to_string(),
                     ));
                 }
-
-                println!("DEBUG: Content type validation passed");
 
                 // Read file data
                 let mut data = Vec::new();
