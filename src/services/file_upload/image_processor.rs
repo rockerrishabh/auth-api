@@ -49,38 +49,22 @@ impl<'a> ImageProcessor<'a> {
         self.save_image(&original_path, &processed_img, filename)?;
 
         // Create and save thumbnail if enabled in configuration
-        let (thumbnail_filename, _thumbnail_path, thumbnail_size) =
-            if self.config.upload.generate_thumbnails {
-                let thumbnail_filename = format!(
-                    "{}_thumb.{}",
-                    filename.trim_end_matches(&format!(
-                        ".{}",
-                        self.get_file_extension_from_filename(filename)?
-                    )),
-                    "webp"
-                );
-                let thumbnail_path = format!("{}/{}", self.config.upload.dir, thumbnail_filename);
-                let thumbnail_img = self.create_thumbnail(img)?;
-                self.save_image_as_webp(&thumbnail_path, &thumbnail_img)?;
-
-                let thumbnail_size = fs::metadata(&thumbnail_path)
-                    .await
-                    .map_err(|e| {
-                        AuthError::InternalError(format!("Failed to get thumbnail metadata: {}", e))
-                    })?
-                    .len();
-
-                (thumbnail_filename, thumbnail_path, thumbnail_size)
-            } else {
-                // No thumbnail generated
-                ("".to_string(), "".to_string(), 0)
-            };
-
-        // Get file sizes
-        let original_size = fs::metadata(&original_path)
-            .await
-            .map_err(|e| AuthError::InternalError(format!("Failed to get file metadata: {}", e)))?
-            .len();
+        let thumbnail_filename = if self.config.upload.generate_thumbnails {
+            let thumbnail_filename = format!(
+                "{}_thumb.{}",
+                filename.trim_end_matches(&format!(
+                    ".{}",
+                    self.get_file_extension_from_filename(filename)?
+                )),
+                "webp"
+            );
+            let thumbnail_path = format!("{}/{}", self.config.upload.dir, thumbnail_filename);
+            let thumbnail_img = self.create_thumbnail(img)?;
+            self.save_image_as_webp(&thumbnail_path, &thumbnail_img)?;
+            thumbnail_filename
+        } else {
+            "".to_string()
+        };
 
         Ok(super::types::ProcessedImage {
             original_path: format!("/static/{}", filename),
@@ -89,8 +73,6 @@ impl<'a> ImageProcessor<'a> {
             } else {
                 format!("/static/{}", thumbnail_filename)
             },
-            original_size,
-            thumbnail_size,
         })
     }
 
