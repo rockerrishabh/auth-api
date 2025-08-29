@@ -5,22 +5,6 @@ use crate::{
 };
 use actix_multipart::Multipart;
 use actix_web::{post, web, HttpRequest, HttpResponse};
-use serde::Serialize;
-
-#[derive(Debug, Serialize)]
-pub struct AvatarUploadResponse {
-    pub message: String,
-    pub success: bool,
-    pub avatar_url: String,
-    pub thumbnail_url: String,
-    pub file_sizes: FileSizes,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FileSizes {
-    pub original: u64,
-    pub thumbnail: u64,
-}
 
 #[post("/avatar")]
 pub async fn upload_avatar(
@@ -64,14 +48,11 @@ pub async fn upload_avatar(
         .update_user_avatar_thumbnail(user_id, &processed_image.thumbnail_path)
         .await?;
 
-    Ok(HttpResponse::Ok().json(AvatarUploadResponse {
-        message: "Avatar uploaded successfully".to_string(),
-        success: true,
-        avatar_url: processed_image.original_path,
-        thumbnail_url: processed_image.thumbnail_path,
-        file_sizes: FileSizes {
-            original: processed_image.original_size,
-            thumbnail: processed_image.thumbnail_size,
-        },
-    }))
+    // Get the updated user to return
+    let updated_user = user_service
+        .get_user_by_id(user_id)
+        .await?
+        .ok_or(crate::error::AuthError::UserNotFound)?;
+
+    Ok(HttpResponse::Ok().json(updated_user))
 }
