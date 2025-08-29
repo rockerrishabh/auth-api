@@ -22,7 +22,7 @@ pub struct SessionInfo {
 }
 
 /// Get user's active sessions
-#[get("/sessions")]
+#[get("")]
 pub async fn get_user_sessions(
     pool: web::Data<DbPool>,
     query: web::Query<std::collections::HashMap<String, String>>,
@@ -72,7 +72,7 @@ pub async fn get_user_sessions(
 }
 
 /// Revoke a specific session
-#[delete("/sessions/{session_id}")]
+#[delete("/{session_id}")]
 pub async fn revoke_session(
     pool: web::Data<DbPool>,
     path: web::Path<uuid::Uuid>,
@@ -102,7 +102,7 @@ pub async fn revoke_session(
 }
 
 /// Revoke all other sessions (keep current one)
-#[delete("/sessions/others")]
+#[delete("/others")]
 pub async fn revoke_other_sessions(
     pool: web::Data<DbPool>,
     http_req: HttpRequest,
