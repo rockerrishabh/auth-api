@@ -74,9 +74,9 @@ impl<'a> ImageProcessor<'a> {
             }
         }
 
-        // Convert path to string and normalize it
-        let path_str = temp_path.to_string_lossy().replace("\\", "/");
-        log::info!("Normalized file path: {}", path_str);
+        // Convert path to string and normalize it for consistency
+        let path_str = temp_path.to_string_lossy();
+        log::info!("File path for saving: {}", path_str);
 
         match fs::write(&temp_path, image_data).await {
             Ok(_) => log::info!("File saved successfully: {:?}", temp_path),

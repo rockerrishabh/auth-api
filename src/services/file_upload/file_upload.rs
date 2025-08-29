@@ -68,8 +68,8 @@ impl FileUploadService {
             );
 
             // Normalize the path for comparison
-            let normalized_path = temp_path.to_string_lossy().replace("\\", "/");
-            log::info!("Normalized path for reading: {}", normalized_path);
+            let normalized_path = temp_path.to_string_lossy();
+            log::info!("Path for reading: {}", normalized_path);
 
             // Check if the file exists before trying to read it
             if !temp_path.exists() {

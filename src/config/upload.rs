@@ -20,25 +20,92 @@ pub struct UploadConfig {
 }
 
 impl UploadConfig {
+    /// Get the project root directory (where Cargo.toml is located)
+    pub fn get_project_root() -> PathBuf {
+        // Start from current directory and walk up to find Cargo.toml
+        let mut current = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+        loop {
+            if current.join("Cargo.toml").exists() {
+                log::info!("Project root found at: {:?}", current);
+                return current;
+            }
+
+            if let Some(parent) = current.parent() {
+                current = parent.to_path_buf();
+            } else {
+                // Fallback to current directory if we can't find Cargo.toml
+                log::warn!("Could not find Cargo.toml, using current directory as project root");
+                return std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            }
+        }
+    }
+
+    /// Get the appropriate base directory for uploads based on environment
+    fn get_upload_base_dir() -> PathBuf {
+        // Check if we're in a production environment
+        let is_production = std::env::var("APP_ENVIRONMENT")
+            .unwrap_or_else(|_| "development".to_string())
+            .eq_ignore_ascii_case("production");
+
+        if is_production {
+            // In production, use absolute paths or environment-specific paths
+            if let Ok(prod_path) = std::env::var("APP_UPLOAD_BASE_DIR") {
+                let path = PathBuf::from(prod_path);
+                log::info!("Using production upload base directory: {:?}", path);
+                return path;
+            } else {
+                // Default production path
+                let default_prod_path = PathBuf::from("/var/www/uploads");
+                log::info!(
+                    "Using default production upload directory: {:?}",
+                    default_prod_path
+                );
+                return default_prod_path;
+            }
+        } else {
+            // In development, use project root
+            let project_root = Self::get_project_root();
+            log::info!(
+                "Using development upload base directory (project root): {:?}",
+                project_root
+            );
+            return project_root;
+        }
+    }
+
     /// Get the absolute path for the upload directory
     pub fn get_absolute_upload_dir(&self) -> PathBuf {
         let path = PathBuf::from(&self.dir);
         if path.is_relative() {
-            // Resolve relative path to absolute path from current working directory
-            let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            // Use environment-appropriate base directory
+            let base_dir = Self::get_upload_base_dir();
+
+            // Create the absolute path from base directory
+            let absolute_path = base_dir.join(&path);
 
             // Log the path resolution for debugging
             log::info!(
-                "Upload config: relative path '{}' resolved to absolute path '{:?}' from current dir '{:?}'",
+                "Upload config: relative path '{}' resolved to absolute path '{:?}' from base dir '{:?}' (platform: {}, environment: {})",
                 self.dir,
-                current_dir.join(&path),
-                current_dir
+                absolute_path,
+                base_dir,
+                if cfg!(windows) { "Windows" } else { "Unix/Linux" },
+                std::env::var("APP_ENVIRONMENT").unwrap_or_else(|_| "development".to_string())
             );
 
-            // Simple path resolution without canonicalize to avoid Windows path prefix issues
-            current_dir.join(&path)
+            absolute_path
         } else {
-            log::info!("Upload config: using absolute path '{:?}'", path);
+            log::info!(
+                "Upload config: using absolute path '{:?}' (platform: {}, environment: {})",
+                path,
+                if cfg!(windows) {
+                    "Windows"
+                } else {
+                    "Unix/Linux"
+                },
+                std::env::var("APP_ENVIRONMENT").unwrap_or_else(|_| "development".to_string())
+            );
             path
         }
     }
@@ -46,12 +113,30 @@ impl UploadConfig {
     /// Get the absolute path for a file in the upload directory
     pub fn get_absolute_file_path(&self, filename: &str) -> PathBuf {
         let file_path = self.get_absolute_upload_dir().join(filename);
+
+        // Normalize the path to ensure consistent slashes across platforms
+        let normalized_path = if cfg!(windows) {
+            // On Windows, convert to forward slashes for consistency
+            // This ensures the same path format is used for both saving and reading
+            PathBuf::from(file_path.to_string_lossy().replace("\\", "/"))
+        } else {
+            // On Unix/Linux, paths are already normalized
+            file_path.clone()
+        };
+
         log::debug!(
-            "File path resolved: '{:?}' for filename '{}'",
+            "File path resolved: '{:?}' (normalized: '{:?}') for filename '{}' on {}",
             file_path,
-            filename
+            normalized_path,
+            filename,
+            if cfg!(windows) {
+                "Windows"
+            } else {
+                "Unix/Linux"
+            }
         );
-        file_path
+
+        normalized_path
     }
 }
 

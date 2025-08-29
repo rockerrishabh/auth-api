@@ -126,6 +126,10 @@ async fn main() -> std::io::Result<()> {
         config.upload.dir,
         config.upload.get_absolute_upload_dir()
     );
+    info!(
+        "  Project root: {:?}",
+        crate::config::upload::UploadConfig::get_project_root()
+    );
     info!("  Max size: {} bytes", config.upload.max_size);
     info!(
         "  Image max dimensions: {}x{}",
